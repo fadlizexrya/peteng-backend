@@ -9,6 +9,7 @@ import (
 	deliveryHttp "peteng-backend/internal/delivery/http"
 	"peteng-backend/internal/repository"
 	"peteng-backend/internal/usecase"
+	"peteng-backend/internal/auth"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -29,7 +30,8 @@ func main() {
 
 	// 3. Setup Dependency & Router
 	wargaRepo := repository.NewWargaRepository(db)
-	wargaUsecase := usecase.NewWargaUsecase(wargaRepo)
+	jwtManager := auth.NewJWTManager()
+	wargaUsecase := usecase.NewWargaUsecase(wargaRepo, jwtManager)
 	wargaHandler := deliveryHttp.NewWargaHandler(wargaUsecase)
 
 	// 4. Setup Dinas Perhubungan Dependencies
