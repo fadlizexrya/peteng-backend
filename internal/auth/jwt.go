@@ -36,24 +36,29 @@ func NewJWTManager() *JWTManager {
 }
 
 type Claims struct {
-	IDWarga int    `json:"id_warga"`
-	Email   string `json:"email"`
+	UserID int    `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
 
 	jwt.RegisteredClaims
 }
 
 func (m *JWTManager) GenerateToken(
-	idWarga int,
+	userID int,
 	email string,
+	role string,
 ) (string, error) {
 
 	now := time.Now()
 
 	claims := Claims{
-		IDWarga: idWarga,
-		Email:   email,
+		UserID: userID,
+		Email:  email,
+		Role:   role,
+
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   strconv.Itoa(idWarga),
+			Subject:   strconv.Itoa(userID),
+			Issuer:    "peteng-backend",
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.expireTime)),
 		},
@@ -76,12 +81,13 @@ func (m *JWTManager) ValidateToken(
 		&Claims{},
 		func(token *jwt.Token) (interface{}, error) {
 
-			if token.Method != jwt.SigningMethodHS256 {
+			if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 				return nil, errors.New("algoritma JWT tidak valid")
 			}
 
 			return m.secret, nil
 		},
+		jwt.WithIssuer("peteng-backend"),
 	)
 
 	if err != nil {

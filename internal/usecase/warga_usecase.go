@@ -92,6 +92,7 @@ func (u *WargaUsecase) Login(
 	token, err := u.jwt.GenerateToken(
 		warga.IDWarga,
 		warga.Email,
+		"warga",
 	)
 
 	if err != nil {
