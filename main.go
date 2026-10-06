@@ -36,7 +36,7 @@ func main() {
 
 	// 4. Setup Dinas Perhubungan Dependencies
 	dinasRepo := repository.NewDinasPerhubunganRepository(db)
-	dinasUsecase := usecase.NewDinasPerhubunganUsecase(dinasRepo)
+	dinasUsecase := usecase.NewDinasPerhubunganUsecase(dinasRepo, jwtManager)
 	dinasHandler := deliveryHttp.NewDinasPerhubunganHandler(dinasUsecase)
 
 	r := chi.NewRouter()
