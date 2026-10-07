@@ -50,8 +50,14 @@ func main() {
 
 	// SETUP LAPORAN
 	laporanRepo := repository.NewLaporanRepository(db)
-	laporanUsecase := usecase.NewLaporanUsecase(laporanRepo)
-	laporanHandler := deliveryHttp.NewLaporanHandler(laporanUsecase)
+	progresRepo := repository.NewProgresLaporanRepository(db)
+	laporanUsecase := usecase.NewLaporanUsecase(
+		laporanRepo,
+		progresRepo,
+	)
+	laporanHandler := deliveryHttp.NewLaporanHandler(
+		laporanUsecase,
+	)
 
 	// SETUP DINAS PERHUBUNGAN
 	dinasRepo := repository.NewDinasPerhubunganRepository(db)

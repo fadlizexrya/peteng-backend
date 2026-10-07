@@ -9,14 +9,17 @@ import (
 )
 
 type LaporanUsecase struct {
-	repo *repository.LaporanRepository
+	laporanRepo *repository.LaporanRepository
+	progresRepo *repository.ProgresLaporanRepository
 }
 
 func NewLaporanUsecase(
-	repo *repository.LaporanRepository,
+	laporanRepo *repository.LaporanRepository,
+	progresRepo *repository.ProgresLaporanRepository,
 ) *LaporanUsecase {
 	return &LaporanUsecase{
-		repo: repo,
+		laporanRepo: laporanRepo,
+		progresRepo: progresRepo,
 	}
 }
 
@@ -26,14 +29,13 @@ func (u *LaporanUsecase) BuatLaporan(
 	req *domain.LaporanReq,
 ) (*domain.Laporan, error) {
 
-	// Validasi tingkat kegelapan dari warga.
-	if req.TingkatKegelapan < 1 || req.TingkatKegelapan > 3 {
+	if req.TingkatKegelapan < 1 ||
+		req.TingkatKegelapan > 3 {
 		return nil, errors.New(
 			"tingkat_kegelapan harus bernilai 1, 2, atau 3",
 		)
 	}
 
-	// Validasi kategori laporan.
 	switch req.Kategori {
 	case "PJU_RUSAK",
 		"PJU_TIDAK_ADA",
@@ -46,7 +48,6 @@ func (u *LaporanUsecase) BuatLaporan(
 		)
 	}
 
-	// ID warga berasal dari JWT, bukan dari request Flutter.
 	laporan := &domain.Laporan{
 		IDWarga:          idWarga,
 		Foto:             req.Foto,
@@ -58,7 +59,22 @@ func (u *LaporanUsecase) BuatLaporan(
 		Deskripsi:        req.Deskripsi,
 	}
 
-	err := u.repo.Create(ctx, laporan)
+	err := u.laporanRepo.Create(
+		ctx,
+		laporan,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = u.progresRepo.Create(
+		ctx,
+		laporan.IDLaporan,
+		"Laporan berhasil dibuat",
+		"Laporan warga berhasil diterima dan menunggu proses validasi AI.",
+	)
+
 	if err != nil {
 		return nil, err
 	}
