@@ -60,6 +60,17 @@ func main() {
 		dinasUsecase,
 	)
 
+	// SETUP LOKASI
+	lokasiRepo := repository.NewLokasiRepository(db)
+
+	lokasiUsecase := usecase.NewLokasiUsecase(
+		lokasiRepo,
+	)
+
+	lokasiHandler := deliveryHttp.NewLokasiHandler(
+		lokasiUsecase,
+	)
+
 	// ROUTER
 	r := chi.NewRouter()
 
@@ -124,6 +135,12 @@ func main() {
 	r.Post(
 		"/api/dinas/login",
 		dinasHandler.Login,
+	)
+
+	// LOKASI
+	r.Get(
+		"/api/lokasi",
+		lokasiHandler.GetAll,
 	)
 
 	// =========================================================
