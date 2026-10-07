@@ -96,4 +96,3 @@ func (u *dinasUsecase) Login(
 
 	return dinas, token, nil
 }
-

@@ -107,10 +107,3 @@ func (u *WargaUsecase) Login(
 		User:  warga,
 	}, nil
 }
-
-func (u *WargaUsecase) BuatLaporan(
-	ctx context.Context,
-	req *domain.LaporanReq,
-) error {
-	return u.repo.CreateLaporan(ctx, req)
-}

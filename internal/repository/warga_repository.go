@@ -35,12 +35,3 @@ func (r *WargaRepository) GetByEmail(ctx context.Context, email string) (*domain
 	}
 	return &w, nil
 }
-
-func (r *WargaRepository) CreateLaporan(ctx context.Context, req *domain.LaporanReq) error {
-	query := `
-		INSERT INTO laporan_jalan_gelap (id_warga, deskripsi, foto_url, lokasi)
-		VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326))
-	`
-	_, err := r.db.Exec(ctx, query, req.IDWarga, req.Deskripsi, req.FotoURL, req.Longitude, req.Latitude)
-	return err
-}

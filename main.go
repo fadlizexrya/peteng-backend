@@ -48,6 +48,11 @@ func main() {
 		wargaUsecase,
 	)
 
+	// SETUP LAPORAN
+	laporanRepo := repository.NewLaporanRepository(db)
+	laporanUsecase := usecase.NewLaporanUsecase(laporanRepo)
+	laporanHandler := deliveryHttp.NewLaporanHandler(laporanUsecase)
+
 	// SETUP DINAS PERHUBUNGAN
 	dinasRepo := repository.NewDinasPerhubunganRepository(db)
 
@@ -170,7 +175,7 @@ func main() {
 		// Endpoint laporan warga
 		r.Post(
 			"/laporan",
-			wargaHandler.LaporkanJalanGelap,
+			laporanHandler.Create,
 		)
 	})
 

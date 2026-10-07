@@ -22,11 +22,3 @@ type LoginReq struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
-
-type LaporanReq struct {
-	IDWarga   int     `json:"id_warga"`
-	Deskripsi string  `json:"deskripsi"`
-	FotoURL   string  `json:"foto_url"`
-	Longitude float64 `json:"longitude"`
-	Latitude  float64 `json:"latitude"`
-}
