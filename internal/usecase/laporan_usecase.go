@@ -113,3 +113,39 @@ func (u *LaporanUsecase) DetailLaporanWarga(
 		Progres: progres,
 	}, nil
 }
+
+func (u *LaporanUsecase) DaftarSemuaLaporan(
+	ctx context.Context,
+) ([]domain.Laporan, error) {
+	return u.laporanRepo.GetAll(ctx)
+}
+
+func (u *LaporanUsecase) UpdateStatusLaporanDishub(
+	ctx context.Context,
+	idLaporan string,
+	idDishub int,
+	req *domain.UpdateStatusLaporanReq,
+) error {
+	switch req.Status {
+	case "diterima", "ditolak", "diproses", "selesai":
+	default:
+		return errors.New("status laporan tidak valid")
+	}
+
+	if req.Judul == "" {
+		return errors.New("judul progres wajib diisi")
+	}
+
+	if req.Deskripsi == "" {
+		return errors.New("deskripsi progres wajib diisi")
+	}
+
+	return u.laporanRepo.UpdateStatusWithProgress(
+		ctx,
+		idLaporan,
+		idDishub,
+		req.Status,
+		req.Judul,
+		req.Deskripsi,
+	)
+}

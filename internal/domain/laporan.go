@@ -31,3 +31,9 @@ type LaporanDetail struct {
 	Laporan Laporan          `json:"laporan"`
 	Progres []ProgresLaporan `json:"progres"`
 }
+
+type UpdateStatusLaporanReq struct {
+	Status    string `json:"status"`
+	Judul     string `json:"judul"`
+	Deskripsi string `json:"deskripsi"`
+}

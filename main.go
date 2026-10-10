@@ -201,11 +201,6 @@ func main() {
 	// =========================================================
 	// 10. PROTECTED ROUTES - DINAS PERHUBUNGAN
 	// =========================================================
-	// Semua route di dalam group ini:
-	// 1. Harus mempunyai JWT
-	// 2. JWT harus valid
-	// 3. Role harus "dishub"
-	// =========================================================
 	r.Route("/api/dinas", func(r chi.Router) {
 
 		// Validasi JWT
@@ -222,13 +217,6 @@ func main() {
 			),
 		)
 
-		// =====================================================
-		// TEST ENDPOINT
-		// =====================================================
-		// Endpoint ini sementara digunakan untuk memastikan
-		// JWT + role Dishub bekerja.
-		// GET /api/dinas/profile
-		// =====================================================
 		r.Get(
 			"/profile",
 			func(w http.ResponseWriter, r *http.Request) {
@@ -261,14 +249,15 @@ func main() {
 			},
 		)
 
-		// =====================================================
-		// NANTI ENDPOINT DINAS AKAN DITAMBAHKAN DI SINI
-		// =====================================================
-		// Contoh:
-		// r.Get("/laporan", dinasHandler.GetLaporan)
-		// r.Put("/laporan/{id}", dinasHandler.UpdateLaporan)
-		// r.Post("/artikel", dinasHandler.CreateArtikel)
-		//
+		r.Get(
+			"/laporan",
+			laporanHandler.GetAllForDishub,
+		)
+
+		r.Patch(
+			"/laporan/{id_laporan}/status",
+			laporanHandler.UpdateStatusDishub,
+		)
 	})
 
 	// SERVER PORT
