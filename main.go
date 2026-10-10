@@ -51,6 +51,7 @@ func main() {
 	// SETUP LAPORAN
 	laporanRepo := repository.NewLaporanRepository(db)
 	progresRepo := repository.NewProgresLaporanRepository(db)
+
 	laporanUsecase := usecase.NewLaporanUsecase(
 		laporanRepo,
 		progresRepo,
@@ -182,6 +183,18 @@ func main() {
 		r.Post(
 			"/laporan",
 			laporanHandler.Create,
+		)
+
+		// Endpoint untuk mengambil laporan warga
+		r.Get(
+			"/laporan",
+			laporanHandler.GetMyReports,
+		)
+
+		// Endpoint untuk mengambil detail laporan warga
+		r.Get(
+			"/laporan/{id_laporan}",
+			laporanHandler.GetDetail,
 		)
 	})
 

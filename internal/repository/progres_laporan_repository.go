@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-
 	"github.com/jackc/pgx/v5/pgxpool"
+	"peteng-backend/internal/domain"
 )
 
 type ProgresLaporanRepository struct {
@@ -47,4 +47,56 @@ func (r *ProgresLaporanRepository) Create(
 	)
 
 	return err
+}
+
+func (r *ProgresLaporanRepository) GetByLaporanID(
+	ctx context.Context,
+	idLaporan string,
+) ([]domain.ProgresLaporan, error) {
+	query := `
+		SELECT
+			id_progres,
+			id_laporan,
+			id_dinas_perhubungan,
+			judul,
+			deskripsi,
+			foto_url,
+			tanggal_progres
+		FROM progres_laporan
+		WHERE id_laporan = $1
+		ORDER BY tanggal_progres ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, idLaporan)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	progresList := make([]domain.ProgresLaporan, 0)
+
+	for rows.Next() {
+		var progres domain.ProgresLaporan
+
+		err := rows.Scan(
+			&progres.IDProgres,
+			&progres.IDLaporan,
+			&progres.IDDinasPerhubungan,
+			&progres.Judul,
+			&progres.Deskripsi,
+			&progres.FotoURL,
+			&progres.TanggalProgres,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		progresList = append(progresList, progres)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return progresList, nil
 }

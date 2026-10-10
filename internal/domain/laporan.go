@@ -26,3 +26,8 @@ type LaporanReq struct {
 	TingkatKegelapan int16   `json:"tingkat_kegelapan"`
 	Deskripsi        string  `json:"deskripsi"`
 }
+
+type LaporanDetail struct {
+	Laporan Laporan          `json:"laporan"`
+	Progres []ProgresLaporan `json:"progres"`
+}
