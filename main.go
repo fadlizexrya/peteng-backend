@@ -74,6 +74,7 @@ func main() {
 
 	// SETUP LOKASI
 	lokasiRepo := repository.NewLokasiRepository(db)
+	ruasJalanRepo := repository.NewRuasJalanRepository(db)
 
 	lokasiUsecase := usecase.NewLokasiUsecase(
 		lokasiRepo,
@@ -87,6 +88,10 @@ func main() {
 	validasiAIRepo := repository.NewValidasiAIRepository(db)
 	validasiAIUsecase := usecase.NewValidasiAIUsecase(validasiAIRepo)
 	validasiAIHandler := deliveryHttp.NewValidasiAIHandler(validasiAIUsecase)
+
+	// SETUP NAVIGASI
+	navigasiUsecase := usecase.NewNavigasiUsecase(ruasJalanRepo)
+	navigasiHandler := deliveryHttp.NewNavigasiHandler(navigasiUsecase)
 
 	// ROUTER
 	r := chi.NewRouter()
@@ -108,6 +113,7 @@ func main() {
 			"GET",
 			"POST",
 			"PUT",
+			"Patch",
 			"DELETE",
 			"OPTIONS",
 		},
@@ -151,6 +157,11 @@ func main() {
 	r.Get(
 		"/api/lokasi",
 		lokasiHandler.GetAll,
+	)
+
+	r.Get(
+		"/api/navigasi/rute",
+		navigasiHandler.CariRute,
 	)
 
 	// PROTECTED ROUTES WARGA
