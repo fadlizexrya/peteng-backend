@@ -83,6 +83,11 @@ func main() {
 		lokasiUsecase,
 	)
 
+	// SETUP VALIDASI AI
+	validasiAIRepo := repository.NewValidasiAIRepository(db)
+	validasiAIUsecase := usecase.NewValidasiAIUsecase(validasiAIRepo)
+	validasiAIHandler := deliveryHttp.NewValidasiAIHandler(validasiAIUsecase)
+
 	// ROUTER
 	r := chi.NewRouter()
 
@@ -119,14 +124,7 @@ func main() {
 		MaxAge: 300,
 	}))
 
-	// =========================================================
-	// 8. PUBLIC ROUTES
-	// =========================================================
-	// Route di bawah TIDAK membutuhkan JWT.
-	// Karena user belum memiliki token ketika melakukan
-	// register dan login.
-	// =========================================================
-
+	// PUBLIC ROUTES
 	// WARGA
 	r.Post(
 		"/api/warga/register",
@@ -155,14 +153,7 @@ func main() {
 		lokasiHandler.GetAll,
 	)
 
-	// =========================================================
-	// 9. PROTECTED ROUTES - WARGA
-	// =========================================================
-	// Semua route di dalam group ini:
-	// 1. Harus mempunyai JWT
-	// 2. JWT harus valid
-	// 3. Role harus "warga"
-	// =========================================================
+	// PROTECTED ROUTES WARGA
 	r.Route("/api/warga", func(r chi.Router) {
 
 		// Validasi JWT
@@ -198,9 +189,7 @@ func main() {
 		)
 	})
 
-	// =========================================================
-	// 10. PROTECTED ROUTES - DINAS PERHUBUNGAN
-	// =========================================================
+	// PROTECTED ROUTES DINAS PERHUBUNGAN
 	r.Route("/api/dinas", func(r chi.Router) {
 
 		// Validasi JWT
@@ -258,6 +247,23 @@ func main() {
 			"/laporan/{id_laporan}/status",
 			laporanHandler.UpdateStatusDishub,
 		)
+
+		// Endpoint validasi AI untuk pengembangan
+		r.Post(
+			"/laporan/{id_laporan}/validasi-ai/mulai",
+			validasiAIHandler.Mulai,
+		)
+
+		r.Post(
+			"/laporan/{id_laporan}/validasi-ai/mock",
+			validasiAIHandler.SimpanHasilMock,
+		)
+
+		r.Get(
+			"/laporan/{id_laporan}/validasi-ai",
+			validasiAIHandler.GetTerbaru,
+		)
+
 	})
 
 	// SERVER PORT

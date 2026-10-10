@@ -2,11 +2,13 @@ package http
 
 import (
 	"encoding/json"
-	"net/http"
-
 	"errors"
+	"net/http"
+	"strings"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+
 	"peteng-backend/internal/domain"
 	"peteng-backend/internal/middleware"
 	"peteng-backend/internal/usecase"
@@ -115,6 +117,7 @@ func (h *LaporanHandler) GetMyReports(
 	})
 }
 
+// GET /api/warga/laporan/{id_laporan}
 func (h *LaporanHandler) GetDetail(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -165,6 +168,7 @@ func (h *LaporanHandler) GetDetail(
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "sukses",
 		"message": "Detail laporan berhasil diambil",
@@ -172,6 +176,7 @@ func (h *LaporanHandler) GetDetail(
 	})
 }
 
+// GET /api/dinas/laporan
 func (h *LaporanHandler) GetAllForDishub(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -198,38 +203,41 @@ func (h *LaporanHandler) GetAllForDishub(
 	})
 }
 
+// PATCH /api/dinas/laporan/{id_laporan}/status
 func (h *LaporanHandler) UpdateStatusDishub(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	// ID akun Dishub diambil dari JWT.
+	// Ambil ID akun Dishub dari JWT.
 	userIDValue := r.Context().Value(middleware.UserIDKey)
+
 	idDishub, ok := userIDValue.(int)
 	if !ok {
-		http.Error(
+		writeJSONError(
 			w,
-			`{"status":"gagal","message":"ID Dishub tidak ditemukan dari token"}`,
 			http.StatusUnauthorized,
+			"ID Dishub tidak ditemukan dari token",
 		)
 		return
 	}
 
 	idLaporan := chi.URLParam(r, "id_laporan")
 	if idLaporan == "" {
-		http.Error(
+		writeJSONError(
 			w,
-			`{"status":"gagal","message":"ID laporan wajib diisi"}`,
 			http.StatusBadRequest,
+			"ID laporan wajib diisi",
 		)
 		return
 	}
 
 	var req domain.UpdateStatusLaporanReq
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(
+		writeJSONError(
 			w,
-			`{"status":"gagal","message":"Format request tidak valid"}`,
 			http.StatusBadRequest,
+			"Format request tidak valid",
 		)
 		return
 	}
@@ -240,32 +248,48 @@ func (h *LaporanHandler) UpdateStatusDishub(
 		idDishub,
 		&req,
 	)
+
 	if err != nil {
+		// Laporan tidak ditemukan.
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(
+			writeJSONError(
 				w,
-				`{"status":"gagal","message":"Laporan tidak ditemukan"}`,
 				http.StatusNotFound,
+				"Laporan tidak ditemukan",
 			)
 			return
 		}
 
-		// Validasi request yang tidak sesuai.
+		// Kesalahan validasi request.
 		if err.Error() == "status laporan tidak valid" ||
 			err.Error() == "judul progres wajib diisi" ||
 			err.Error() == "deskripsi progres wajib diisi" {
-			http.Error(
+			writeJSONError(
 				w,
-				`{"status":"gagal","message":"`+err.Error()+`"}`,
 				http.StatusBadRequest,
+				err.Error(),
 			)
 			return
 		}
 
-		http.Error(
+		// Transisi status tidak diperbolehkan.
+		if strings.HasPrefix(
+			err.Error(),
+			"transisi status tidak diizinkan:",
+		) {
+			writeJSONError(
+				w,
+				http.StatusBadRequest,
+				err.Error(),
+			)
+			return
+		}
+
+		// Error database atau server lainnya.
+		writeJSONError(
 			w,
-			`{"status":"gagal","message":"Gagal memperbarui status laporan"}`,
 			http.StatusInternalServerError,
+			"Gagal memperbarui status laporan",
 		)
 		return
 	}
@@ -276,5 +300,20 @@ func (h *LaporanHandler) UpdateStatusDishub(
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "sukses",
 		"message": "Status laporan dan progres berhasil diperbarui",
+	})
+}
+
+// Helper untuk respons error JSON.
+func writeJSONError(
+	w http.ResponseWriter,
+	statusCode int,
+	message string,
+) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "gagal",
+		"message": message,
 	})
 }

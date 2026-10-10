@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"peteng-backend/internal/domain"
 )
@@ -283,45 +284,58 @@ func (r *LaporanRepository) UpdateStatusWithProgress(
 		_ = tx.Rollback(ctx)
 	}()
 
-	// Perbarui status laporan.
-	queryUpdate := `
-		UPDATE laporan
-		SET status = $1,
-		    updated_at = NOW()
-		WHERE id_laporan = $2
-		RETURNING id_laporan
-	`
+	// Ambil dan kunci status laporan saat ini.
+	var statusLama string
+	err = tx.QueryRow(ctx, `
+        SELECT status
+        FROM laporan
+        WHERE id_laporan = $1
+        FOR UPDATE
+    `, idLaporan).Scan(&statusLama)
 
-	var updatedID string
-	err = tx.QueryRow(
-		ctx,
-		queryUpdate,
-		status,
-		idLaporan,
-	).Scan(&updatedID)
 	if err != nil {
 		return err
 	}
 
-	// Catat perubahan sebagai riwayat progres Dishub.
-	queryProgress := `
-		INSERT INTO progres_laporan (
-			id_laporan,
-			id_dinas_perhubungan,
-			judul,
-			deskripsi
-		)
-		VALUES ($1, $2, $3, $4)
-	`
+	// Aturan transisi status oleh Dishub.
+	transisiDiizinkan := false
 
-	_, err = tx.Exec(
-		ctx,
-		queryProgress,
-		updatedID,
-		idDishub,
-		judul,
-		deskripsi,
-	)
+	switch statusLama {
+	case "diterima":
+		transisiDiizinkan = status == "diproses"
+	case "diproses":
+		transisiDiizinkan = status == "selesai"
+	}
+
+	if !transisiDiizinkan {
+		return fmt.Errorf(
+			"transisi status tidak diizinkan: %s -> %s",
+			statusLama,
+			status,
+		)
+	}
+
+	// Perbarui status laporan.
+	_, err = tx.Exec(ctx, `
+        UPDATE laporan
+        SET status = $1,
+            updated_at = NOW()
+        WHERE id_laporan = $2
+    `, status, idLaporan)
+	if err != nil {
+		return err
+	}
+
+	// Simpan riwayat progres dari Dishub.
+	_, err = tx.Exec(ctx, `
+        INSERT INTO progres_laporan (
+            id_laporan,
+            id_dinas_perhubungan,
+            judul,
+            deskripsi
+        )
+        VALUES ($1, $2, $3, $4)
+    `, idLaporan, idDishub, judul, deskripsi)
 	if err != nil {
 		return err
 	}
