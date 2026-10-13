@@ -86,8 +86,16 @@ func main() {
 
 	// SETUP VALIDASI AI
 	validasiAIRepo := repository.NewValidasiAIRepository(db)
-	validasiAIUsecase := usecase.NewValidasiAIUsecase(validasiAIRepo)
-	validasiAIHandler := deliveryHttp.NewValidasiAIHandler(validasiAIUsecase)
+	aiClient := usecase.NewHTTPAIServiceClient(
+		os.Getenv("AI_SERVICE_URL"),
+	)
+	validasiAIUsecase := usecase.NewValidasiAIUsecase(
+		validasiAIRepo,
+		aiClient,
+	)
+	validasiAIHandler := deliveryHttp.NewValidasiAIHandler(
+		validasiAIUsecase,
+	)
 
 	// SETUP NAVIGASI
 	navigasiUsecase := usecase.NewNavigasiUsecase(ruasJalanRepo)
@@ -263,6 +271,11 @@ func main() {
 		r.Post(
 			"/laporan/{id_laporan}/validasi-ai/mulai",
 			validasiAIHandler.Mulai,
+		)
+
+		r.Post(
+			"/laporan/{id_laporan}/validasi-ai/proses",
+			validasiAIHandler.Proses,
 		)
 
 		r.Post(

@@ -78,6 +78,19 @@ func (h *ValidasiAIHandler) SimpanHasilMock(
 	writeJSONSuccess(w, http.StatusOK, "Hasil validasi mock berhasil disimpan")
 }
 
+// POST /api/dinas/laporan/{id_laporan}/validasi-ai/proses
+func (h *ValidasiAIHandler) Proses(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id_laporan")
+
+	err := h.usecase.ProsesValidasiAI(r.Context(), id, nil)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSONSuccess(w, http.StatusOK, "Validasi AI selesai")
+}
+
 // GET /api/dinas/laporan/{id_laporan}/validasi-ai
 func (h *ValidasiAIHandler) GetTerbaru(
 	w http.ResponseWriter,

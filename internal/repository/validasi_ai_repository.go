@@ -172,6 +172,85 @@ func (r *ValidasiAIRepository) SimpanHasilMock(
 	return tx.Commit(ctx)
 }
 
+// Menyimpan hasil AI nyata dan mengubah status laporan ke diterima/ditolak.
+func (r *ValidasiAIRepository) SimpanHasilAI(
+	ctx context.Context,
+	idLaporan string,
+	hasil *domain.ValidasiAIResponse,
+) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	statusAkhir := "ditolak"
+	judulProgres := "Validasi AI ditolak"
+	if hasil.Data.HasilValidasi == "valid" {
+		statusAkhir = "diterima"
+		judulProgres = "Validasi AI diterima"
+	}
+
+	objekJSON, err := json.Marshal(hasil.Data.ObjekTerdeteksi)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO validasi_ai (
+			id_laporan,
+			hasil_validasi,
+			tingkat_kegelapan_ai,
+			cnn_confidence,
+			objek_terdeteksi,
+			yolo_confidence,
+			catatan,
+			model_version
+		)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+	`,
+		idLaporan,
+		hasil.Data.HasilValidasi,
+		hasil.Data.TingkatKegelapanAI,
+		hasil.Data.CNNConfidence,
+		string(objekJSON),
+		hasil.Data.YOLOConfidence,
+		hasil.Data.Catatan,
+		hasil.Data.ModelVersion,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE laporan
+		SET status = $1,
+		    updated_at = NOW()
+		WHERE id_laporan = $2
+	`, statusAkhir, idLaporan)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO progres_laporan (
+			id_laporan,
+			judul,
+			deskripsi
+		)
+		VALUES ($1, $2, $3)
+	`,
+		idLaporan,
+		judulProgres,
+		hasil.Data.Catatan,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 // Mengambil hasil validasi AI terbaru untuk sebuah laporan.
 func (r *ValidasiAIRepository) GetTerbaru(
 	ctx context.Context,
