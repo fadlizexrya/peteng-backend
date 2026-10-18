@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -67,9 +68,17 @@ func (h *NavigasiHandler) CariRute(w http.ResponseWriter, r *http.Request) {
 		endLon,
 	)
 	if err != nil {
+		if errors.Is(err, usecase.ErrTitikDiLuarWilayah) {
+			writeNavigasiJSON(w, http.StatusBadRequest, map[string]any{
+				"status":  "gagal",
+				"message": err.Error(),
+			})
+			return
+		}
+
 		writeNavigasiJSON(w, http.StatusBadGateway, map[string]any{
 			"status":  "gagal",
-			"message": "Tidak dapat memperoleh rute dari layanan routing",
+			"message": "Tidak dapat memperoleh atau memvalidasi rute",
 		})
 		return
 	}

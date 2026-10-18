@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -22,6 +23,10 @@ const (
 	BobotDurasi     = 0.15
 
 	AmbangCakupanData = 0.60
+)
+
+var ErrTitikDiLuarWilayah = errors.New(
+	"titik awal atau tujuan berada di luar Kabupaten Indramayu",
 )
 
 // NavigasiUsecase menangani pencarian dan penilaian rute.
@@ -79,6 +84,8 @@ type RuteNavigasi struct {
 	JarakMeter       float64             `json:"jarak_meter"`
 	DurasiDetik      float64             `json:"durasi_detik"`
 	Geometry         json.RawMessage     `json:"geometry"`
+	DalamWilayah     bool                `json:"dalam_wilayah"`
+	StatusWilayah    string              `json:"status_wilayah"`
 	Penerangan       PenilaianPenerangan `json:"penerangan"`
 	SkorJarak        float64             `json:"skor_jarak"`
 	SkorDurasi       float64             `json:"skor_durasi"`
@@ -127,6 +134,46 @@ func (u *NavigasiUsecase) CariRute(
 	if u.ruasJalanRepo == nil {
 		return nil, fmt.Errorf(
 			"repository ruas jalan belum dikonfigurasi",
+		)
+	}
+
+	// Periksa titik awal terhadap batas Kabupaten Indramayu.
+	startDalamWilayah, err := u.ruasJalanRepo.TitikDalamWilayah(
+		ctx,
+		startLat,
+		startLon,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"gagal memeriksa titik awal: %w",
+			err,
+		)
+	}
+
+	if !startDalamWilayah {
+		return nil, fmt.Errorf(
+			"%w: titik awal",
+			ErrTitikDiLuarWilayah,
+		)
+	}
+
+	// Periksa titik tujuan terhadap batas Kabupaten Indramayu.
+	endDalamWilayah, err := u.ruasJalanRepo.TitikDalamWilayah(
+		ctx,
+		endLat,
+		endLon,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"gagal memeriksa titik tujuan: %w",
+			err,
+		)
+	}
+
+	if !endDalamWilayah {
+		return nil, fmt.Errorf(
+			"%w: titik tujuan",
+			ErrTitikDiLuarWilayah,
 		)
 	}
 
@@ -205,6 +252,17 @@ func (u *NavigasiUsecase) CariRute(
 
 	// Nilai setiap alternatif berdasarkan data ruas jalan.
 	for i, rute := range hasilOSRM.Routes {
+		dalamWilayah, err := u.ruasJalanRepo.RuteDalamWilayah(
+			ctx,
+			rute.Geometry,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"gagal memeriksa batas wilayah rute %d: %w",
+				i+1,
+				err,
+			)
+		}
 		penilaianDB, err := u.ruasJalanRepo.HitungPenerangan(
 			ctx,
 			rute.Geometry,
@@ -265,12 +323,19 @@ func (u *NavigasiUsecase) CariRute(
 			penilaian.StatusPenilaian = "belum_ada_data_penerangan"
 		}
 
+		statusWilayah := "di_dalam_wilayah"
+		if !dalamWilayah {
+			statusWilayah = "di_luar_wilayah"
+		}
+
 		hasil.Rute = append(hasil.Rute, RuteNavigasi{
-			NomorRute:   i + 1,
-			JarakMeter:  rute.Distance,
-			DurasiDetik: rute.Duration,
-			Geometry:    rute.Geometry,
-			Penerangan:  penilaian,
+			NomorRute:     i + 1,
+			JarakMeter:    rute.Distance,
+			DurasiDetik:   rute.Duration,
+			Geometry:      rute.Geometry,
+			DalamWilayah:  dalamWilayah,
+			StatusWilayah: statusWilayah,
+			Penerangan:    penilaian,
 		})
 	}
 
@@ -307,6 +372,9 @@ func hitungPeringkatRute(hasil *HasilNavigasi) {
 
 	// Rute layak harus memiliki skor penerangan dan cakupan data memadai.
 	layakDirekomendasikan := func(rute RuteNavigasi) bool {
+		if rute.StatusWilayah == "di_luar_wilayah" {
+			return false
+		}
 		return rute.Penerangan.SkorPenerangan != nil &&
 			rute.Penerangan.StatusPenilaian == "cakupan_data_memadai"
 	}

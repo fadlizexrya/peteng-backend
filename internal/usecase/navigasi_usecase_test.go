@@ -258,3 +258,180 @@ func TestHitungPeringkatRute_SemuaRuteTidakValid(t *testing.T) {
 		}
 	}
 }
+
+func TestHitungPeringkatRute_DiLuarWilayahTidakDirekomendasikan(
+	t *testing.T,
+) {
+	hasil := &HasilNavigasi{
+		Rute: []RuteNavigasi{
+			{
+				NomorRute:     1,
+				JarakMeter:    1000,
+				DurasiDetik:   100,
+				StatusWilayah: "di_luar_wilayah",
+				DalamWilayah:  false,
+				Penerangan: PenilaianPenerangan{
+					SkorPenerangan:  floatPtr(100),
+					StatusData:      "simulasi",
+					StatusPenilaian: "cakupan_data_memadai",
+				},
+			},
+			{
+				NomorRute:     2,
+				JarakMeter:    1500,
+				DurasiDetik:   150,
+				StatusWilayah: "di_dalam_wilayah",
+				DalamWilayah:  true,
+				Penerangan: PenilaianPenerangan{
+					SkorPenerangan:  floatPtr(80),
+					StatusData:      "simulasi",
+					StatusPenilaian: "cakupan_data_memadai",
+				},
+			},
+		},
+	}
+
+	hitungPeringkatRute(hasil)
+
+	for _, rute := range hasil.Rute {
+		if rute.StatusWilayah == "di_luar_wilayah" {
+			if rute.Direkomendasikan {
+				t.Error("rute di luar wilayah tidak boleh direkomendasikan")
+			}
+			if rute.SkorAkhir != nil {
+				t.Error("rute di luar wilayah tidak boleh mendapat skor akhir")
+			}
+		}
+	}
+
+	if hasil.NomorRuteRekomendasi == nil {
+		t.Fatal("rute di dalam wilayah seharusnya dapat direkomendasikan")
+	}
+
+	if *hasil.NomorRuteRekomendasi != 2 {
+		t.Errorf(
+			"diharapkan rute 2 direkomendasikan, didapat rute %d",
+			*hasil.NomorRuteRekomendasi,
+		)
+	}
+}
+
+func TestHitungPeringkatRute_SemuaRuteDiLuarWilayah(t *testing.T) {
+	hasil := &HasilNavigasi{
+		Rute: []RuteNavigasi{
+			{
+				NomorRute:     1,
+				JarakMeter:    1000,
+				DurasiDetik:   100,
+				DalamWilayah:  false,
+				StatusWilayah: "di_luar_wilayah",
+				Penerangan: PenilaianPenerangan{
+					SkorPenerangan:  floatPtr(100),
+					StatusData:      "simulasi",
+					StatusPenilaian: "cakupan_data_memadai",
+				},
+			},
+			{
+				NomorRute:     2,
+				JarakMeter:    1500,
+				DurasiDetik:   150,
+				DalamWilayah:  false,
+				StatusWilayah: "di_luar_wilayah",
+				Penerangan: PenilaianPenerangan{
+					SkorPenerangan:  floatPtr(90),
+					StatusData:      "simulasi",
+					StatusPenilaian: "cakupan_data_memadai",
+				},
+			},
+		},
+	}
+
+	hitungPeringkatRute(hasil)
+
+	if hasil.NomorRuteRekomendasi != nil {
+		t.Error("tidak boleh ada rekomendasi jika semua rute di luar wilayah")
+	}
+
+	if hasil.StatusRekomendasi != "belum_ada_rekomendasi" {
+		t.Errorf(
+			"diharapkan belum_ada_rekomendasi, didapat %q",
+			hasil.StatusRekomendasi,
+		)
+	}
+
+	for _, rute := range hasil.Rute {
+		if rute.SkorAkhir != nil {
+			t.Errorf(
+				"rute %d di luar wilayah tidak boleh memiliki skor akhir",
+				rute.NomorRute,
+			)
+		}
+
+		if rute.Direkomendasikan {
+			t.Errorf(
+				"rute %d di luar wilayah tidak boleh direkomendasikan",
+				rute.NomorRute,
+			)
+		}
+	}
+}
+
+func TestHitungPeringkatRute_CakupanMemadaiDirekomendasikan(t *testing.T) {
+	skorPeneranganA := 90.0
+	skorPeneranganB := 80.0
+
+	hasil := &HasilNavigasi{
+		Rute: []RuteNavigasi{
+			{
+				NomorRute:     1,
+				JarakMeter:    1000,
+				DurasiDetik:   100,
+				DalamWilayah:  true,
+				StatusWilayah: "di_dalam_wilayah",
+				Penerangan: PenilaianPenerangan{
+					SkorPenerangan:  &skorPeneranganA,
+					StatusPenilaian: "cakupan_data_memadai",
+					StatusData:      "simulasi",
+				},
+			},
+			{
+				NomorRute:     2,
+				JarakMeter:    1200,
+				DurasiDetik:   120,
+				DalamWilayah:  true,
+				StatusWilayah: "di_dalam_wilayah",
+				Penerangan: PenilaianPenerangan{
+					SkorPenerangan:  &skorPeneranganB,
+					StatusPenilaian: "cakupan_data_memadai",
+					StatusData:      "simulasi",
+				},
+			},
+		},
+	}
+
+	hitungPeringkatRute(hasil)
+
+	if hasil.NomorRuteRekomendasi == nil {
+		t.Fatal("seharusnya ada rute yang direkomendasikan")
+	}
+
+	if *hasil.NomorRuteRekomendasi != 1 {
+		t.Errorf(
+			"rute rekomendasi = %d, ingin 1",
+			*hasil.NomorRuteRekomendasi,
+		)
+	}
+
+	if !hasil.Rute[0].Direkomendasikan {
+		t.Error("rute pertama seharusnya direkomendasikan")
+	}
+
+	if hasil.Rute[0].SkorAkhir == nil {
+		t.Error("rute pertama seharusnya memiliki skor akhir")
+	}
+
+	if hasil.Rute[1].SkorAkhir == nil {
+		t.Error("rute kedua yang layak juga seharusnya memiliki skor akhir")
+	}
+}
+

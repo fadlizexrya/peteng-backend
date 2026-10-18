@@ -35,9 +35,9 @@ func (u *ValidasiAIUsecase) ProsesValidasiAI(
 	// Status transition already starts in MulaiValidasi. This function assumes diproses_ai.
 	req := &domain.ValidasiAIRequest{
 		IDLaporan:              idLaporan,
-		FotoURL:                 "",
-		Kategori:                "PJU_RUSAK",
-		TingkatKegelapanManual:  1,
+		FotoURL:                "",
+		Kategori:               "PJU_RUSAK",
+		TingkatKegelapanManual: 1,
 	}
 
 	hasil, err := u.aiClient.ValidasiLaporan(ctx, req)

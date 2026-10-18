@@ -26,24 +26,24 @@ type ValidasiAIMockRequest struct {
 
 // Request internal ke AI service.
 type ValidasiAIRequest struct {
-	IDLaporan               string `json:"id_laporan"`
-	FotoURL                 string `json:"foto_url"`
-	Kategori                string `json:"kategori"`
-	TingkatKegelapanManual  int16  `json:"tingkat_kegelapan_manual"`
+	IDLaporan              string `json:"id_laporan"`
+	FotoURL                string `json:"foto_url"`
+	Kategori               string `json:"kategori"`
+	TingkatKegelapanManual int16  `json:"tingkat_kegelapan_manual"`
 }
 
 // Response dari AI service.
 type ValidasiAIResponseData struct {
-	HasilValidasi         string          `json:"hasil_validasi"`
-	TingkatKegelapanAI    int16           `json:"tingkat_kegelapan_ai"`
-	ObjekTerdeteksi       any             `json:"objek_terdeteksi"`
-	CNNConfidence         *float64        `json:"cnn_confidence"`
-	YOLOConfidence        *float64        `json:"yolo_confidence"`
-	ModelVersion          string          `json:"model_version"`
-	Catatan               string          `json:"catatan"`
+	HasilValidasi      string   `json:"hasil_validasi"`
+	TingkatKegelapanAI int16    `json:"tingkat_kegelapan_ai"`
+	ObjekTerdeteksi    any      `json:"objek_terdeteksi"`
+	CNNConfidence      *float64 `json:"cnn_confidence"`
+	YOLOConfidence     *float64 `json:"yolo_confidence"`
+	ModelVersion       string   `json:"model_version"`
+	Catatan            string   `json:"catatan"`
 }
 
 type ValidasiAIResponse struct {
-	Status string                `json:"status"`
+	Status string                 `json:"status"`
 	Data   ValidasiAIResponseData `json:"data"`
 }

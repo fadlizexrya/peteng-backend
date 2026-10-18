@@ -131,3 +131,90 @@ func (r *RuasJalanRepository) HitungPenerangan(
 
 	return hasil, nil
 }
+
+// TitikDalamWilayah memeriksa apakah titik berada di dalam
+// atau tepat pada batas Kabupaten Indramayu.
+func (r *RuasJalanRepository) TitikDalamWilayah(
+	ctx context.Context,
+	latitude, longitude float64,
+) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM public.batas_wilayah
+			WHERE tingkat_wilayah = 'kabupaten'
+			  AND LOWER(TRIM(nama_wilayah)) = 'kabupaten indramayu'
+			  AND ST_Covers(
+				  geom,
+				  ST_SetSRID(
+					  ST_MakePoint($1, $2),
+					  4326
+				  )
+			  )
+		)
+	`
+
+	var dalamWilayah bool
+
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		longitude,
+		latitude,
+	).Scan(&dalamWilayah)
+
+	if err != nil {
+		return false, fmt.Errorf(
+			"gagal memeriksa titik terhadap batas wilayah: %w",
+			err,
+		)
+	}
+
+	return dalamWilayah, nil
+}
+
+// RuteDalamWilayah memeriksa apakah seluruh geometri rute
+// berada di dalam atau pada batas Kabupaten Indramayu.
+func (r *RuasJalanRepository) RuteDalamWilayah(
+	ctx context.Context,
+	geometry json.RawMessage,
+) (bool, error) {
+	if !json.Valid(geometry) {
+		return false, fmt.Errorf(
+			"geometri rute bukan JSON yang valid",
+		)
+	}
+
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM public.batas_wilayah
+			WHERE tingkat_wilayah = 'kabupaten'
+			  AND LOWER(TRIM(nama_wilayah)) = 'kabupaten indramayu'
+			  AND ST_Covers(
+				  geom,
+				  ST_SetSRID(
+					  ST_GeomFromGeoJSON($1),
+					  4326
+				  )
+			  )
+		)
+	`
+
+	var dalamWilayah bool
+
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		string(geometry),
+	).Scan(&dalamWilayah)
+
+	if err != nil {
+		return false, fmt.Errorf(
+			"gagal memeriksa geometri rute terhadap batas wilayah: %w",
+			err,
+		)
+	}
+
+	return dalamWilayah, nil
+}
