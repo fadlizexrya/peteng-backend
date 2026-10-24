@@ -434,4 +434,3 @@ func TestHitungPeringkatRute_CakupanMemadaiDirekomendasikan(t *testing.T) {
 		t.Error("rute kedua yang layak juga seharusnya memiliki skor akhir")
 	}
 }
-

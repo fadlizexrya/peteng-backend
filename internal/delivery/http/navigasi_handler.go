@@ -3,10 +3,10 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
-	"strconv"
-
 	"peteng-backend/internal/usecase"
+	"strconv"
 )
 
 type NavigasiHandler struct {
@@ -68,6 +68,7 @@ func (h *NavigasiHandler) CariRute(w http.ResponseWriter, r *http.Request) {
 		endLon,
 	)
 	if err != nil {
+		log.Printf("ERROR navigasi CariRute: %v", err)
 		if errors.Is(err, usecase.ErrTitikDiLuarWilayah) {
 			writeNavigasiJSON(w, http.StatusBadRequest, map[string]any{
 				"status":  "gagal",

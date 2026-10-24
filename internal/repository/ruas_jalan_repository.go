@@ -16,6 +16,7 @@ type HasilPenilaianPenerangan struct {
 	PanjangTidakDiketahuiMeter float64
 	JumlahSegmen               int
 	AdaDataSimulasi            bool
+	Segmen                     []SegmenPenerangan
 }
 
 type RuasJalanRepository struct {
@@ -36,100 +37,212 @@ func (r *RuasJalanRepository) HitungPenerangan(
 	}
 
 	const query = `
-		WITH rute AS (
-			SELECT ST_Transform(
-				ST_SetSRID(
-					ST_GeomFromGeoJSON($1),
-					4326
-				),
-				32749
-			) AS geom
-		),
-		ruas AS (
-			SELECT
-				id_ruas,
-				tingkat_penerangan,
-				sumber_data,
-				ST_Transform(geom, 32749) AS geom
-			FROM public.ruas_jalan
-		),
-		segmen_rute AS (
-			SELECT
-				(d).geom AS geom
-			FROM rute r
-			CROSS JOIN LATERAL ST_DumpSegments(
-				ST_Segmentize(r.geom, 10.0)
-			) AS d
-		),
-		klasifikasi AS (
-			SELECT
-				s.geom,
-				ST_Length(s.geom) AS panjang_meter,
-				j.tingkat_penerangan,
-				j.sumber_data
-			FROM segmen_rute s
-			LEFT JOIN LATERAL (
-				SELECT
-					rj.tingkat_penerangan,
-					rj.sumber_data
-				FROM ruas rj
-				WHERE ST_DWithin(
-					rj.geom,
-					ST_LineInterpolatePoint(s.geom, 0.5),
-					15.0
-				)
-				ORDER BY ST_Distance(
-					rj.geom,
-					ST_LineInterpolatePoint(s.geom, 0.5)
-				)
-				LIMIT 1
-			) j ON TRUE
-		)
-		SELECT
-			COALESCE(SUM(panjang_meter), 0)::float8,
-			COALESCE(SUM(panjang_meter) FILTER (
-				WHERE tingkat_penerangan = 'terang'
-			), 0)::float8,
-			COALESCE(SUM(panjang_meter) FILTER (
-				WHERE tingkat_penerangan = 'redup'
-			), 0)::float8,
-			COALESCE(SUM(panjang_meter) FILTER (
-				WHERE tingkat_penerangan = 'gelap'
-			), 0)::float8,
-			COALESCE(SUM(panjang_meter) FILTER (
-				WHERE tingkat_penerangan = 'belum_diketahui'
-				   OR tingkat_penerangan IS NULL
-			), 0)::float8,
-			COUNT(*)::int,
-			COALESCE(BOOL_OR(
-				sumber_data = 'simulasi_pengujian'
-			), FALSE)
-		FROM klasifikasi
-	`
+    WITH rute AS (
+        SELECT ST_Transform(
+            ST_SetSRID(
+                ST_GeomFromGeoJSON($1),
+                4326
+            ),
+            32749
+        ) AS geom
+    ),
+    segmen_rute AS (
+        SELECT
+            (d).path AS path,
+            (d).geom AS geom
+        FROM rute r
+        CROSS JOIN LATERAL ST_DumpSegments(
+            ST_Segmentize(r.geom, 10.0)
+        ) AS d
+    ),
+    titik_segmen AS (
+        SELECT
+            path,
+            geom,
+            ST_Length(geom) AS panjang_meter,
+            ST_LineInterpolatePoint(geom, 0.5) AS titik_tengah
+        FROM segmen_rute
+    ),
+    klasifikasi AS (
+        SELECT
+            s.path,
+            s.geom,
+            s.panjang_meter,
 
-	hasil := &HasilPenilaianPenerangan{}
+            COALESCE(
+                simulasi.tingkat_penerangan,
+                NULL
+            ) AS tingkat_penerangan,
 
-	err := r.db.QueryRow(
-		ctx,
-		query,
-		string(geometry),
-	).Scan(
-		&hasil.PanjangRuteMeter,
-		&hasil.PanjangTerangMeter,
-		&hasil.PanjangRedupMeter,
-		&hasil.PanjangGelapMeter,
-		&hasil.PanjangTidakDiketahuiMeter,
-		&hasil.JumlahSegmen,
-		&hasil.AdaDataSimulasi,
-	)
+            CASE
+                WHEN simulasi.sumber_data IS NOT NULL
+                    THEN simulasi.sumber_data
+                WHEN osm.id IS NOT NULL
+                    THEN 'OpenStreetMap'
+                ELSE 'tidak_tersedia'
+            END AS sumber_data
+
+        FROM titik_segmen s
+
+        -- Prioritas pertama: data penerangan PETENG
+        LEFT JOIN LATERAL (
+            SELECT
+                rj.tingkat_penerangan::text AS tingkat_penerangan,
+                rj.sumber_data::text AS sumber_data
+            FROM public.ruas_jalan rj
+            WHERE ST_DWithin(
+                ST_Transform(rj.geom, 32749),
+                s.titik_tengah,
+                15.0
+            )
+            ORDER BY ST_Distance(
+                ST_Transform(rj.geom, 32749),
+                s.titik_tengah
+            )
+            LIMIT 1
+        ) simulasi ON TRUE
+
+        -- Prioritas kedua: geometri jalan OpenStreetMap
+        LEFT JOIN LATERAL (
+            SELECT
+                osm_jalan.id
+            FROM public.ruas_jalan_osm osm_jalan
+            WHERE simulasi.sumber_data IS NULL
+              AND osm_jalan.geom IS NOT NULL
+              AND ST_DWithin(
+                  ST_Transform(osm_jalan.geom, 32749),
+                  s.titik_tengah,
+                  15.0
+              )
+            ORDER BY ST_Distance(
+                ST_Transform(osm_jalan.geom, 32749),
+                s.titik_tengah
+            )
+            LIMIT 1
+        ) osm ON TRUE
+    )
+    SELECT
+        ST_X(
+            ST_Transform(ST_StartPoint(geom), 4326)
+        )::float8 AS awal_lon,
+
+        ST_Y(
+            ST_Transform(ST_StartPoint(geom), 4326)
+        )::float8 AS awal_lat,
+
+        ST_X(
+            ST_Transform(ST_EndPoint(geom), 4326)
+        )::float8 AS akhir_lon,
+
+        ST_Y(
+            ST_Transform(ST_EndPoint(geom), 4326)
+        )::float8 AS akhir_lat,
+
+        panjang_meter::float8,
+
+        CASE
+            WHEN tingkat_penerangan IN ('terang', 'redup', 'gelap')
+                THEN tingkat_penerangan
+            ELSE 'tidak_diketahui'
+        END AS status,
+
+        sumber_data,
+
+        COALESCE(
+            sumber_data = 'simulasi_pengujian',
+            FALSE
+        ) AS data_simulasi
+
+    FROM klasifikasi
+    ORDER BY path
+`
+
+	hasil := &HasilPenilaianPenerangan{
+		Segmen: make([]SegmenPenerangan, 0),
+	}
+
+	rows, err := r.db.Query(ctx, query, string(geometry))
 	if err != nil {
 		return nil, fmt.Errorf(
-			"gagal menghitung panjang penerangan rute: %w",
+			"gagal mengambil segmen penerangan: %w",
+			err,
+		)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			awalLon, awalLat   float64
+			akhirLon, akhirLat float64
+			panjang            float64
+			status             string
+			sumberData         string
+			dataSimulasi       bool
+		)
+
+		if err := rows.Scan(
+			&awalLon,
+			&awalLat,
+			&akhirLon,
+			&akhirLat,
+			&panjang,
+			&status,
+			&sumberData,
+			&dataSimulasi,
+		); err != nil {
+			return nil, fmt.Errorf(
+				"gagal membaca segmen penerangan: %w",
+				err,
+			)
+		}
+
+		hasil.Segmen = append(
+			hasil.Segmen,
+			SegmenPenerangan{
+				KoordinatAwal:  [2]float64{awalLon, awalLat},
+				KoordinatAkhir: [2]float64{akhirLon, akhirLat},
+				PanjangMeter:   panjang,
+				Status:         status,
+				SumberData:     sumberData,
+			},
+		)
+
+		hasil.PanjangRuteMeter += panjang
+
+		switch status {
+		case "terang":
+			hasil.PanjangTerangMeter += panjang
+		case "redup":
+			hasil.PanjangRedupMeter += panjang
+		case "gelap":
+			hasil.PanjangGelapMeter += panjang
+		default:
+			hasil.PanjangTidakDiketahuiMeter += panjang
+		}
+
+		if dataSimulasi {
+			hasil.AdaDataSimulasi = true
+		}
+
+		hasil.JumlahSegmen++
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf(
+			"gagal membaca hasil segmen penerangan: %w",
 			err,
 		)
 	}
 
 	return hasil, nil
+}
+
+type SegmenPenerangan struct {
+	KoordinatAwal  [2]float64 `json:"koordinat_awal"`
+	KoordinatAkhir [2]float64 `json:"koordinat_akhir"`
+	PanjangMeter   float64    `json:"panjang_meter"`
+	Status         string     `json:"status"`
+	SumberData     string     `json:"sumber_data"`
 }
 
 // TitikDalamWilayah memeriksa apakah titik berada di dalam

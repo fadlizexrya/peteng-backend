@@ -80,18 +80,19 @@ type PenilaianPenerangan struct {
 
 // RuteNavigasi menyimpan informasi dan skor setiap alternatif.
 type RuteNavigasi struct {
-	NomorRute        int                 `json:"nomor_rute"`
-	JarakMeter       float64             `json:"jarak_meter"`
-	DurasiDetik      float64             `json:"durasi_detik"`
-	Geometry         json.RawMessage     `json:"geometry"`
-	DalamWilayah     bool                `json:"dalam_wilayah"`
-	StatusWilayah    string              `json:"status_wilayah"`
-	Penerangan       PenilaianPenerangan `json:"penerangan"`
-	SkorJarak        float64             `json:"skor_jarak"`
-	SkorDurasi       float64             `json:"skor_durasi"`
-	SkorAkhir        *float64            `json:"skor_akhir"`
-	Peringkat        int                 `json:"peringkat,omitempty"`
-	Direkomendasikan bool                `json:"direkomendasikan"`
+	NomorRute        int                           `json:"nomor_rute"`
+	JarakMeter       float64                       `json:"jarak_meter"`
+	DurasiDetik      float64                       `json:"durasi_detik"`
+	Geometry         json.RawMessage               `json:"geometry"`
+	DalamWilayah     bool                          `json:"dalam_wilayah"`
+	StatusWilayah    string                        `json:"status_wilayah"`
+	Penerangan       PenilaianPenerangan           `json:"penerangan"`
+	SegmenPenerangan []repository.SegmenPenerangan `json:"segmen_penerangan"`
+	SkorJarak        float64                       `json:"skor_jarak"`
+	SkorDurasi       float64                       `json:"skor_durasi"`
+	SkorAkhir        *float64                      `json:"skor_akhir"`
+	Peringkat        int                           `json:"peringkat,omitempty"`
+	Direkomendasikan bool                          `json:"direkomendasikan"`
 }
 
 // HasilNavigasi adalah respons utama pencarian rute.
@@ -329,13 +330,14 @@ func (u *NavigasiUsecase) CariRute(
 		}
 
 		hasil.Rute = append(hasil.Rute, RuteNavigasi{
-			NomorRute:     i + 1,
-			JarakMeter:    rute.Distance,
-			DurasiDetik:   rute.Duration,
-			Geometry:      rute.Geometry,
-			DalamWilayah:  dalamWilayah,
-			StatusWilayah: statusWilayah,
-			Penerangan:    penilaian,
+			NomorRute:        i + 1,
+			JarakMeter:       rute.Distance,
+			DurasiDetik:      rute.Duration,
+			Geometry:         rute.Geometry,
+			DalamWilayah:     dalamWilayah,
+			StatusWilayah:    statusWilayah,
+			Penerangan:       penilaian,
+			SegmenPenerangan: penilaianDB.Segmen,
 		})
 	}
 
@@ -415,6 +417,7 @@ func hitungPeringkatRute(hasil *HasilNavigasi) {
 	}
 
 	if !adaRuteLayak {
+		hasil.StatusRekomendasi = "data_penerangan_belum_cukup"
 		return
 	}
 
