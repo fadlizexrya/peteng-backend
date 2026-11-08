@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"peteng-backend/internal/domain"
+	"peteng-backend/internal/repository"
 	"peteng-backend/internal/usecase"
 
 	"github.com/go-chi/chi/v5"
@@ -13,13 +14,15 @@ import (
 )
 
 type ValidasiAIHandler struct {
-	usecase *usecase.ValidasiAIUsecase
+	usecase     *usecase.ValidasiAIUsecase
+	laporanRepo *repository.LaporanRepository
 }
 
 func NewValidasiAIHandler(
 	u *usecase.ValidasiAIUsecase,
+	laporanRepo *repository.LaporanRepository,
 ) *ValidasiAIHandler {
-	return &ValidasiAIHandler{usecase: u}
+	return &ValidasiAIHandler{usecase: u, laporanRepo: laporanRepo}
 }
 
 // POST /api/dinas/laporan/{id_laporan}/validasi-ai/mulai
@@ -82,7 +85,7 @@ func (h *ValidasiAIHandler) SimpanHasilMock(
 func (h *ValidasiAIHandler) Proses(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id_laporan")
 
-	err := h.usecase.ProsesValidasiAI(r.Context(), id, nil)
+	err := h.usecase.ProsesValidasiAI(r.Context(), id, h.laporanRepo)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return

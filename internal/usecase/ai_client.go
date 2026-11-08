@@ -3,21 +3,29 @@ package usecase
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
+	"os"
+	"strings"
 	"time"
 
 	"peteng-backend/internal/domain"
 )
 
 type AIServiceClient interface {
-	ValidasiLaporan(ctx context.Context, req *domain.ValidasiAIRequest) (*domain.ValidasiAIResponse, error)
+	ValidasiFoto(ctx context.Context, imageBytes []byte, filename, contentType string) (*domain.ValidasiAIResponse, error)
 }
 
 type HTTPAIServiceClient struct {
-	baseURL string
-	client  *http.Client
+	baseURL      string
+	serviceToken string
+	client       *http.Client
 }
 
 func NewHTTPAIServiceClient(baseURL string) *HTTPAIServiceClient {
@@ -25,47 +33,129 @@ func NewHTTPAIServiceClient(baseURL string) *HTTPAIServiceClient {
 		baseURL = "http://localhost:8000"
 	}
 	return &HTTPAIServiceClient{
-		baseURL: baseURL,
+		baseURL:      strings.TrimRight(baseURL, "/"),
+		serviceToken: os.Getenv("AI_SERVICE_TOKEN"),
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
 }
 
-func (c *HTTPAIServiceClient) ValidasiLaporan(ctx context.Context, req *domain.ValidasiAIRequest) (*domain.ValidasiAIResponse, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, err
+func (c *HTTPAIServiceClient) ValidasiFoto(
+	ctx context.Context,
+	imageBytes []byte,
+	filename string,
+	contentType string,
+) (*domain.ValidasiAIResponse, error) {
+	if len(imageBytes) == 0 {
+		return nil, errors.New("foto laporan kosong")
 	}
 
 	const maxAttempts = 3
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/validasi", bytes.NewReader(body))
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		if filename == "" {
+			filename = "laporan.jpg"
+		}
+		if contentType == "" {
+			contentType = "image/jpeg"
+		}
+		part, err := writer.CreatePart(textproto.MIMEHeader{
+			"Content-Disposition": []string{fmt.Sprintf(`form-data; name="image"; filename="%s"`, filename)},
+			"Content-Type":        []string{contentType},
+		})
 		if err != nil {
 			return nil, err
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
+		if _, err = part.Write(imageBytes); err != nil {
+			return nil, err
+		}
+		if err = writer.Close(); err != nil {
+			return nil, err
+		}
+
+		httpReq, err := http.NewRequestWithContext(
+			ctx,
+			http.MethodPost,
+			c.baseURL+"/api/v1/ai/validate",
+			&body,
+		)
+		if err != nil {
+			return nil, err
+		}
+		httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+		httpReq.Header.Set("X-Request-ID", fmt.Sprintf("ai-%d", time.Now().UnixNano()))
+		if c.serviceToken != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+c.serviceToken)
+		}
+		_ = contentType // MIME is detected and validated by the AI service.
 
 		resp, err := c.client.Do(httpReq)
 		if err != nil {
 			lastErr = err
-			time.Sleep(2 * time.Second)
-			continue
+		} else {
+			responseBody, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if readErr != nil {
+				return nil, readErr
+			}
+
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				var result domain.ValidasiAIResponse
+				if err := json.Unmarshal(responseBody, &result); err != nil {
+					return nil, err
+				}
+				result.Data = domain.ValidasiAIResponseData{
+					Success:       result.Success,
+					RequestID:     result.RequestID,
+					AIStatus:      result.AIStatus,
+					PhotoStatus:   result.PhotoStatus,
+					LightingClass: result.LightingClass,
+					Confidence:    result.Confidence,
+					ModelVersion:  result.ModelVersion,
+					Message:       result.Message,
+				}
+				return &result, nil
+			}
+
+			lastErr = fmt.Errorf("ai service status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+			if resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout {
+				return nil, lastErr
+			}
 		}
 
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			lastErr = fmt.Errorf("ai service status %d", resp.StatusCode)
-			time.Sleep(2 * time.Second)
-			continue
+		if attempt < maxAttempts-1 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(1<<attempt) * time.Second):
+			}
 		}
-
-		var result domain.ValidasiAIResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			return nil, err
-		}
-		return &result, nil
 	}
 	return nil, lastErr
+}
+
+// DecodeStoredPhoto converts the existing base64 JSON field into image bytes.
+// It supports both plain base64 and data URI values used by older clients.
+func DecodeStoredPhoto(value string) ([]byte, string, error) {
+	value = strings.TrimSpace(value)
+	contentType := "image/jpeg"
+	if comma := strings.Index(value, ","); strings.HasPrefix(value, "data:") && comma >= 0 {
+		header := value[:comma]
+		value = value[comma+1:]
+		if semi := strings.Index(header, ";"); semi > len("data:") {
+			contentType = header[len("data:"):semi]
+		}
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return nil, "", fmt.Errorf("foto laporan bukan base64 valid: %w", err)
+	}
+	if len(decoded) == 0 {
+		return nil, "", errors.New("foto laporan kosong")
+	}
+	return decoded, contentType, nil
 }

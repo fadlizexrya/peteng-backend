@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"peteng-backend/internal/domain"
 	"peteng-backend/internal/repository"
@@ -32,20 +33,67 @@ func (u *ValidasiAIUsecase) ProsesValidasiAI(
 		return errors.New("ai client tidak terkonfigurasi")
 	}
 
-	// Status transition already starts in MulaiValidasi. This function assumes diproses_ai.
-	req := &domain.ValidasiAIRequest{
-		IDLaporan:              idLaporan,
-		FotoURL:                "",
-		Kategori:               "PJU_RUSAK",
-		TingkatKegelapanManual: 1,
+	if laporanRepo == nil {
+		return errors.New("repository laporan tidak terkonfigurasi")
 	}
-
-	hasil, err := u.aiClient.ValidasiLaporan(ctx, req)
+	laporan, err := laporanRepo.GetByID(ctx, idLaporan)
+	if err != nil {
+		return err
+	}
+	imageBytes, contentType, err := DecodeStoredPhoto(laporan.Foto)
 	if err != nil {
 		return err
 	}
 
+	hasil, err := u.aiClient.ValidasiFoto(ctx, imageBytes, "laporan.jpg", contentType)
+	if err != nil {
+		return err
+	}
+	normalizeAIResponse(hasil)
+
 	return u.repo.SimpanHasilAI(ctx, idLaporan, hasil)
+}
+
+func normalizeAIResponse(response *domain.ValidasiAIResponse) {
+	if response == nil {
+		return
+	}
+	level := int16(0)
+	if response.LightingClass != nil {
+		switch *response.LightingClass {
+		case "terang":
+			level = 1
+		case "redup":
+			level = 2
+		case "gelap":
+			level = 3
+		}
+	}
+	valid := response.PhotoStatus != nil && *response.PhotoStatus == "layak_dinilai"
+	if response.AIStatus == "perlu_tinjauan_manual" {
+		valid = false
+	}
+	result := "tidak_valid"
+	if valid {
+		result = "valid"
+	}
+	response.Data = domain.ValidasiAIResponseData{
+		Success:            response.Success,
+		RequestID:          response.RequestID,
+		AIStatus:           response.AIStatus,
+		PhotoStatus:        response.PhotoStatus,
+		LightingClass:      response.LightingClass,
+		Confidence:         response.Confidence,
+		ModelVersion:       response.ModelVersion,
+		Message:            response.Message,
+		HasilValidasi:      result,
+		TingkatKegelapanAI: level,
+		CNNConfidence:      response.Confidence,
+		Catatan:            response.Message,
+	}
+	if response.Data.Catatan == "" {
+		response.Data.Catatan = fmt.Sprintf("Status AI: %s", response.AIStatus)
+	}
 }
 
 func (u *ValidasiAIUsecase) MulaiValidasi(

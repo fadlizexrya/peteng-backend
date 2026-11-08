@@ -95,6 +95,7 @@ func main() {
 	)
 	validasiAIHandler := deliveryHttp.NewValidasiAIHandler(
 		validasiAIUsecase,
+		laporanRepo,
 	)
 
 	// SETUP NAVIGASI

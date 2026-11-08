@@ -24,26 +24,38 @@ type ValidasiAIMockRequest struct {
 	Catatan            string `json:"catatan"`
 }
 
-// Request internal ke AI service.
-type ValidasiAIRequest struct {
-	IDLaporan              string `json:"id_laporan"`
-	FotoURL                string `json:"foto_url"`
-	Kategori               string `json:"kategori"`
-	TingkatKegelapanManual int16  `json:"tingkat_kegelapan_manual"`
-}
-
-// Response dari AI service.
+// Response internal dari AI PETENG.
 type ValidasiAIResponseData struct {
+	// Field berikut adalah kontrak AI PETENG.
+	Success       bool     `json:"success"`
+	RequestID     string   `json:"request_id"`
+	AIStatus      string   `json:"ai_status"`
+	PhotoStatus   *string  `json:"photo_status"`
+	LightingClass *string  `json:"lighting_class"`
+	Confidence    *float64 `json:"confidence"`
+	ModelVersion  *string  `json:"model_version"`
+	Message       string   `json:"message"`
+
+	// Field legacy dipertahankan agar repository dan API lama tetap kompatibel.
 	HasilValidasi      string   `json:"hasil_validasi"`
 	TingkatKegelapanAI int16    `json:"tingkat_kegelapan_ai"`
 	ObjekTerdeteksi    any      `json:"objek_terdeteksi"`
 	CNNConfidence      *float64 `json:"cnn_confidence"`
 	YOLOConfidence     *float64 `json:"yolo_confidence"`
-	ModelVersion       string   `json:"model_version"`
 	Catatan            string   `json:"catatan"`
 }
 
 type ValidasiAIResponse struct {
-	Status string                 `json:"status"`
-	Data   ValidasiAIResponseData `json:"data"`
+	// Kontrak AI PETENG dikembalikan flat, sedangkan Data digunakan sebagai
+	// model internal setelah normalisasi di usecase.
+	Success       bool     `json:"success"`
+	RequestID     string   `json:"request_id"`
+	AIStatus      string   `json:"ai_status"`
+	PhotoStatus   *string  `json:"photo_status"`
+	LightingClass *string  `json:"lighting_class"`
+	Confidence    *float64 `json:"confidence"`
+	ModelVersion  *string  `json:"model_version"`
+	Message       string   `json:"message"`
+
+	Data ValidasiAIResponseData `json:"-"`
 }

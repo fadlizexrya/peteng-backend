@@ -158,6 +158,31 @@ func (r *LaporanRepository) GetByWargaID(
 	return laporans, nil
 }
 
+func (r *LaporanRepository) GetByID(
+	ctx context.Context,
+	idLaporan string,
+) (*domain.Laporan, error) {
+	query := `
+		SELECT id_laporan, id_warga, foto, latitude, longitude,
+		       keterangan_lokasi, kategori, tingkat_kegelapan, deskripsi,
+		       status, tanggal_laporan, updated_at
+		FROM laporan
+		WHERE id_laporan = $1
+	`
+
+	var laporan domain.Laporan
+	err := r.db.QueryRow(ctx, query, idLaporan).Scan(
+		&laporan.IDLaporan, &laporan.IDWarga, &laporan.Foto,
+		&laporan.Latitude, &laporan.Longitude, &laporan.KeteranganLokasi,
+		&laporan.Kategori, &laporan.TingkatKegelapan, &laporan.Deskripsi,
+		&laporan.Status, &laporan.TanggalLaporan, &laporan.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &laporan, nil
+}
+
 func (r *LaporanRepository) GetByIDAndWargaID(
 	ctx context.Context,
 	idLaporan string,
