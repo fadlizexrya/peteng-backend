@@ -37,7 +37,11 @@ func (u *LaporanUsecase) BuatLaporan(
 	}
 
 	switch req.Kategori {
-	case "PJU_RUSAK", "PJU_TIDAK_ADA", "PJU_MATI", "LAINNYA":
+	case "pju_mati_total",
+		"pju_redup_kedip",
+		"tiang_roboh_rusak",
+		"belum_ada_jaringan",
+		"lainnya":
 	default:
 		return nil, errors.New("kategori laporan tidak valid")
 	}
