@@ -417,7 +417,6 @@ func hitungPeringkatRute(hasil *HasilNavigasi) {
 	}
 
 	if !adaRuteLayak {
-		hasil.StatusRekomendasi = "data_penerangan_belum_cukup"
 		return
 	}
 

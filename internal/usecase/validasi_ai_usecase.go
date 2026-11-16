@@ -2,8 +2,8 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 
 	"peteng-backend/internal/domain"
 	"peteng-backend/internal/repository"
@@ -49,15 +49,29 @@ func (u *ValidasiAIUsecase) ProsesValidasiAI(
 	if err != nil {
 		return err
 	}
-	normalizeAIResponse(hasil)
+	if hasil == nil {
+		return errors.New("layanan AI mengembalikan respons kosong")
+	}
+	responseJSON, err := json.Marshal(hasil)
+	if err != nil {
+		return err
+	}
+	if err := normalizeAIResponse(hasil); err != nil {
+		return err
+	}
 
+	hasil.Data.HasilJSON = responseJSON
 	return u.repo.SimpanHasilAI(ctx, idLaporan, hasil)
 }
 
-func normalizeAIResponse(response *domain.ValidasiAIResponse) {
+func normalizeAIResponse(response *domain.ValidasiAIResponse) error {
 	if response == nil {
-		return
+		return errors.New("respons AI kosong")
 	}
+	if !response.Success {
+		return errors.New("AI tidak berhasil memvalidasi foto")
+	}
+
 	level := int16(0)
 	if response.LightingClass != nil {
 		switch *response.LightingClass {
@@ -67,33 +81,38 @@ func normalizeAIResponse(response *domain.ValidasiAIResponse) {
 			level = 2
 		case "gelap":
 			level = 3
+		default:
+			return errors.New("lighting_class AI tidak dikenal")
 		}
 	}
-	valid := response.PhotoStatus != nil && *response.PhotoStatus == "layak_dinilai"
-	if response.AIStatus == "perlu_tinjauan_manual" {
-		valid = false
+
+	photoLayak := response.PhotoStatus != nil && *response.PhotoStatus == "layak_dinilai"
+	if photoLayak && level == 0 {
+		return errors.New("AI menyatakan foto layak tetapi tidak memberikan lighting_class")
 	}
+	if photoLayak && response.AIStatus != "selesai" {
+		return errors.New("status AI tidak konsisten untuk foto layak")
+	}
+	if !photoLayak && response.PhotoStatus != nil && *response.PhotoStatus != "tidak_layak" && *response.PhotoStatus != "perlu_tinjauan" {
+		return errors.New("photo_status AI tidak dikenal")
+	}
+
 	result := "tidak_valid"
-	if valid {
+	var levelPtr *int16
+	if photoLayak {
 		result = "valid"
+		levelPtr = &level
 	}
+
 	response.Data = domain.ValidasiAIResponseData{
-		Success:            response.Success,
-		RequestID:          response.RequestID,
-		AIStatus:           response.AIStatus,
-		PhotoStatus:        response.PhotoStatus,
-		LightingClass:      response.LightingClass,
-		Confidence:         response.Confidence,
-		ModelVersion:       response.ModelVersion,
-		Message:            response.Message,
-		HasilValidasi:      result,
-		TingkatKegelapanAI: level,
-		CNNConfidence:      response.Confidence,
-		Catatan:            response.Message,
+		Success: response.Success, RequestID: response.RequestID,
+		AIStatus: response.AIStatus, PhotoStatus: response.PhotoStatus,
+		LightingClass: response.LightingClass, Confidence: response.Confidence,
+		ModelVersion: response.ModelVersion, Message: response.Message,
+		HasilValidasi: result, TingkatKegelapanAI: levelPtr,
+		CNNConfidence: response.Confidence, Catatan: response.Message,
 	}
-	if response.Data.Catatan == "" {
-		response.Data.Catatan = fmt.Sprintf("Status AI: %s", response.AIStatus)
-	}
+	return nil
 }
 
 func (u *ValidasiAIUsecase) MulaiValidasi(
@@ -113,6 +132,9 @@ func (u *ValidasiAIUsecase) SimpanHasilMock(
 	idLaporan string,
 	req *domain.ValidasiAIMockRequest,
 ) error {
+	if req == nil {
+		return errors.New("request mock wajib diisi")
+	}
 	if idLaporan == "" {
 		return errors.New("id laporan wajib diisi")
 	}

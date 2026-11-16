@@ -1,15 +1,17 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type ValidasiAI struct {
 	IDValidasi         string    `json:"id_validasi"`
 	IDLaporan          string    `json:"id_laporan"`
 	HasilValidasi      string    `json:"hasil_validasi"`
-	TingkatKegelapanAI int16     `json:"tingkat_kegelapan_ai"`
+	TingkatKegelapanAI *int16    `json:"tingkat_kegelapan_ai"`
 	CNNConfidence      *float64  `json:"cnn_confidence"`
 	ObjekTerdeteksi    any       `json:"objek_terdeteksi"`
-	YOLOConfidence     *float64  `json:"yolo_confidence"`
 	Catatan            *string   `json:"catatan"`
 	ModelVersion       *string   `json:"model_version"`
 	TanggalValidasi    time.Time `json:"tanggal_validasi"`
@@ -38,11 +40,13 @@ type ValidasiAIResponseData struct {
 
 	// Field legacy dipertahankan agar repository dan API lama tetap kompatibel.
 	HasilValidasi      string   `json:"hasil_validasi"`
-	TingkatKegelapanAI int16    `json:"tingkat_kegelapan_ai"`
+	TingkatKegelapanAI *int16   `json:"tingkat_kegelapan_ai"`
 	ObjekTerdeteksi    any      `json:"objek_terdeteksi"`
 	CNNConfidence      *float64 `json:"cnn_confidence"`
-	YOLOConfidence     *float64 `json:"yolo_confidence"`
 	Catatan            string   `json:"catatan"`
+
+	// Internal processing metadata for persistence.
+	HasilJSON json.RawMessage `json:"-"`
 }
 
 type ValidasiAIResponse struct {

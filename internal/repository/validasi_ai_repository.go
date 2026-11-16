@@ -184,11 +184,40 @@ func (r *ValidasiAIRepository) SimpanHasilAI(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if hasil == nil {
+		return errors.New("hasil validasi AI kosong")
+	}
 	statusAkhir := "ditolak"
 	judulProgres := "Validasi AI ditolak"
 	if hasil.Data.HasilValidasi == "valid" {
 		statusAkhir = "diterima"
 		judulProgres = "Validasi AI diterima"
+	}
+	if hasil.Data.HasilValidasi != "valid" && hasil.Data.HasilValidasi != "tidak_valid" {
+		return errors.New("hasil validasi AI tidak valid")
+	}
+	if hasil.Data.HasilValidasi == "valid" && (hasil.Data.TingkatKegelapanAI == nil || *hasil.Data.TingkatKegelapanAI < 1 || *hasil.Data.TingkatKegelapanAI > 3) {
+		return errors.New("hasil valid memerlukan tingkat kegelapan 1-3")
+	}
+	if hasil.Data.HasilValidasi == "tidak_valid" && hasil.Data.TingkatKegelapanAI != nil {
+		return errors.New("hasil tidak_valid harus tanpa tingkat kegelapan")
+	}
+
+	var responseJSON any
+	if len(hasil.Data.HasilJSON) > 0 {
+		responseJSON = string(hasil.Data.HasilJSON)
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO riwayat_hasil_ai (
+			id_laporan, request_id, ai_status, photo_status,
+			lighting_class, confidence, model_version, pesan, response_json
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+	`, idLaporan, hasil.Data.RequestID, hasil.Data.AIStatus,
+		stringOrNil(hasil.Data.PhotoStatus), stringOrNil(hasil.Data.LightingClass),
+		hasil.Data.Confidence, hasil.Data.ModelVersion, hasil.Data.Message, responseJSON)
+	if err != nil {
+		return err
 	}
 
 	objekJSON, err := json.Marshal(hasil.Data.ObjekTerdeteksi)
@@ -203,18 +232,16 @@ func (r *ValidasiAIRepository) SimpanHasilAI(
 			tingkat_kegelapan_ai,
 			cnn_confidence,
 			objek_terdeteksi,
-			yolo_confidence,
 			catatan,
 			model_version
 		)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
 	`,
 		idLaporan,
 		hasil.Data.HasilValidasi,
 		hasil.Data.TingkatKegelapanAI,
 		hasil.Data.CNNConfidence,
 		string(objekJSON),
-		hasil.Data.YOLOConfidence,
 		hasil.Data.Catatan,
 		hasil.Data.ModelVersion,
 	)
@@ -252,6 +279,13 @@ func (r *ValidasiAIRepository) SimpanHasilAI(
 }
 
 // Mengambil hasil validasi AI terbaru untuk sebuah laporan.
+func stringOrNil(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
 func (r *ValidasiAIRepository) GetTerbaru(
 	ctx context.Context,
 	idLaporan string,
@@ -267,7 +301,6 @@ func (r *ValidasiAIRepository) GetTerbaru(
 			tingkat_kegelapan_ai,
 			cnn_confidence,
 			objek_terdeteksi,
-			yolo_confidence,
 			catatan,
 			model_version,
 			tanggal_validasi
@@ -282,7 +315,6 @@ func (r *ValidasiAIRepository) GetTerbaru(
 		&hasil.TingkatKegelapanAI,
 		&hasil.CNNConfidence,
 		&objekJSON,
-		&hasil.YOLOConfidence,
 		&hasil.Catatan,
 		&hasil.ModelVersion,
 		&hasil.TanggalValidasi,
