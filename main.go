@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"peteng-backend/config"
 	"peteng-backend/internal/auth"
 	deliveryHttp "peteng-backend/internal/delivery/http"
+	"peteng-backend/internal/mailer"
 	petengMiddleware "peteng-backend/internal/middleware"
 	"peteng-backend/internal/repository"
 	"peteng-backend/internal/usecase"
@@ -39,9 +41,29 @@ func main() {
 	// SETUP WARGA
 	wargaRepo := repository.NewWargaRepository(db)
 
+	// Tambahkan kolom verifikasi email & Google secara otomatis.
+	if err := wargaRepo.EnsureAuthSchema(context.Background()); err != nil {
+		log.Printf(
+			"Peringatan: gagal menyiapkan kolom auth (jalankan SQL migrasi manual): %v",
+			err,
+		)
+	}
+
+	mailService := mailer.NewFromEnv()
+
+	if mailService.Enabled() {
+		log.Println("SMTP email verifikasi aktif.")
+	} else {
+		log.Println(
+			"SMTP belum dikonfigurasi. Email verifikasi tidak akan terkirim " +
+				"(mode dev menampilkan kode di log dan response).",
+		)
+	}
+
 	wargaUsecase := usecase.NewWargaUsecase(
 		wargaRepo,
 		jwtManager,
+		mailService,
 	)
 
 	wargaHandler := deliveryHttp.NewWargaHandler(
@@ -149,6 +171,28 @@ func main() {
 	r.Post(
 		"/api/warga/login",
 		wargaHandler.Login,
+	)
+
+	// Verifikasi email (kode dari aplikasi / link dari email).
+	r.Post(
+		"/api/warga/verify-email",
+		wargaHandler.VerifyEmail,
+	)
+
+	r.Get(
+		"/api/warga/verify-email",
+		wargaHandler.VerifyEmailLink,
+	)
+
+	r.Post(
+		"/api/warga/resend-verification",
+		wargaHandler.ResendVerification,
+	)
+
+	// Login dengan akun Google (id token dari aplikasi).
+	r.Post(
+		"/api/warga/google",
+		wargaHandler.RegisterWithGoogle,
 	)
 
 	// DINAS PERHUBUNGAN
