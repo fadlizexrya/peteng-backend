@@ -16,6 +16,8 @@ func TestNormalizeAIResponseMapsValidLighting(t *testing.T) {
 			Success: true, AIStatus: "selesai",
 			PhotoStatus:   stringPointer("layak_dinilai"),
 			LightingClass: stringPointer(test.lighting),
+			Confidence:    floatPointer(0.9),
+			ModelVersion:  stringPointer("test-model"),
 		}
 		if err := normalizeAIResponse(response); err != nil {
 			t.Fatalf("normalize %s: %v", test.lighting, err)
@@ -29,14 +31,35 @@ func TestNormalizeAIResponseMapsValidLighting(t *testing.T) {
 func TestNormalizeAIResponseMapsUnusablePhotoToNilLevel(t *testing.T) {
 	response := &domain.ValidasiAIResponse{
 		Success: true, AIStatus: "selesai",
-		PhotoStatus: stringPointer("tidak_layak"),
-		Message:     "Foto tidak menampilkan kondisi jalan. Harap unggah ulang foto yang sesuai.",
+		PhotoStatus:  stringPointer("tidak_layak"),
+		Confidence:   floatPointer(0.9),
+		ModelVersion: stringPointer("test-model"),
+		Message:      "Foto tidak menampilkan kondisi jalan. Harap unggah ulang foto yang sesuai.",
 	}
 	if err := normalizeAIResponse(response); err != nil {
 		t.Fatal(err)
 	}
 	if response.Data.HasilValidasi != "tidak_valid" || response.Data.TingkatKegelapanAI != nil {
 		t.Fatalf("expected tidak_valid with nil level, got %+v", response.Data)
+	}
+}
+
+func TestNormalizeAIResponseRejectsUnsupportedOrIncompleteContract(t *testing.T) {
+	tests := []struct {
+		name     string
+		response *domain.ValidasiAIResponse
+	}{
+		{"needs review unsupported", &domain.ValidasiAIResponse{Success: true, AIStatus: "selesai", PhotoStatus: stringPointer("perlu_tinjauan"), Confidence: floatPointer(0.8), ModelVersion: stringPointer("test")}},
+		{"missing photo status", &domain.ValidasiAIResponse{Success: true, AIStatus: "selesai", Confidence: floatPointer(0.8), ModelVersion: stringPointer("test")}},
+		{"missing confidence", &domain.ValidasiAIResponse{Success: true, AIStatus: "selesai", PhotoStatus: stringPointer("tidak_layak"), ModelVersion: stringPointer("test")}},
+		{"unfinished AI", &domain.ValidasiAIResponse{Success: true, AIStatus: "gagal", PhotoStatus: stringPointer("tidak_layak"), Confidence: floatPointer(0.8), ModelVersion: stringPointer("test")}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := normalizeAIResponse(test.response); err == nil {
+				t.Fatal("expected invalid AI response to be rejected")
+			}
+		})
 	}
 }
 
@@ -59,3 +82,5 @@ func TestDecodeStoredPhotoDataURI(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
+
+func floatPointer(value float64) *float64 { return &value }

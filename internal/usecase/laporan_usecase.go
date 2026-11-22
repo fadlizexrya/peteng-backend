@@ -95,9 +95,6 @@ func (u *LaporanUsecase) BuatLaporan(
 			defer cancel()
 			if err := u.validasiAI.ProsesValidasiAI(ctx, id, u.laporanRepo); err != nil {
 				log.Printf("validasi AI laporan %s gagal: %v", id, err)
-				if statusErr := u.validasiAI.TandaiGagal(ctx, id, err.Error()); statusErr != nil {
-					log.Printf("gagal menandai validasi AI laporan %s: %v", id, statusErr)
-				}
 			}
 		}(laporan.IDLaporan)
 	}

@@ -29,15 +29,14 @@ func (u *ValidasiAIUsecase) ProsesValidasiAI(
 	if idLaporan == "" {
 		return errors.New("id laporan wajib diisi")
 	}
-	if u.aiClient == nil {
-		return errors.New("ai client tidak terkonfigurasi")
-	}
 	if u.repo == nil {
 		return errors.New("repository validasi AI tidak terkonfigurasi")
 	}
-
+	if u.aiClient == nil {
+		return u.gagalValidasi(ctx, idLaporan, errors.New("ai client tidak terkonfigurasi"))
+	}
 	if laporanRepo == nil {
-		return errors.New("repository laporan tidak terkonfigurasi")
+		return u.gagalValidasi(ctx, idLaporan, errors.New("repository laporan tidak terkonfigurasi"))
 	}
 	laporan, err := laporanRepo.GetByID(ctx, idLaporan)
 	if err != nil {
@@ -46,28 +45,42 @@ func (u *ValidasiAIUsecase) ProsesValidasiAI(
 	if err := u.repo.MulaiValidasi(ctx, idLaporan); err != nil {
 		return err
 	}
-	imageBytes, contentType, err := DecodeStoredPhoto(laporan.Foto)
-	if err != nil {
-		return err
+	proses := func() error {
+		imageBytes, contentType, err := DecodeStoredPhoto(laporan.Foto)
+		if err != nil {
+			return err
+		}
+		hasil, err := u.aiClient.ValidasiFoto(ctx, imageBytes, "laporan.jpg", contentType)
+		if err != nil {
+			return err
+		}
+		if hasil == nil {
+			return errors.New("layanan AI mengembalikan respons kosong")
+		}
+		responseJSON, err := json.Marshal(hasil)
+		if err != nil {
+			return err
+		}
+		if err := normalizeAIResponse(hasil); err != nil {
+			return err
+		}
+		hasil.Data.HasilJSON = responseJSON
+		return u.repo.SimpanHasilAI(ctx, idLaporan, hasil)
 	}
+	if err := proses(); err != nil {
+		return u.gagalValidasi(ctx, idLaporan, err)
+	}
+	return nil
+}
 
-	hasil, err := u.aiClient.ValidasiFoto(ctx, imageBytes, "laporan.jpg", contentType)
-	if err != nil {
-		return err
+func (u *ValidasiAIUsecase) gagalValidasi(ctx context.Context, idLaporan string, cause error) error {
+	if u.repo == nil {
+		return cause
 	}
-	if hasil == nil {
-		return errors.New("layanan AI mengembalikan respons kosong")
+	if err := u.repo.TandaiGagal(ctx, idLaporan, cause.Error()); err != nil {
+		return errors.Join(cause, err)
 	}
-	responseJSON, err := json.Marshal(hasil)
-	if err != nil {
-		return err
-	}
-	if err := normalizeAIResponse(hasil); err != nil {
-		return err
-	}
-
-	hasil.Data.HasilJSON = responseJSON
-	return u.repo.SimpanHasilAI(ctx, idLaporan, hasil)
+	return cause
 }
 
 func normalizeAIResponse(response *domain.ValidasiAIResponse) error {
@@ -76,6 +89,18 @@ func normalizeAIResponse(response *domain.ValidasiAIResponse) error {
 	}
 	if !response.Success {
 		return errors.New("AI tidak berhasil memvalidasi foto")
+	}
+	if response.AIStatus != "selesai" {
+		return errors.New("ai_status AI tidak dikenal atau belum selesai")
+	}
+	if response.PhotoStatus == nil {
+		return errors.New("photo_status AI wajib diisi")
+	}
+	if response.Confidence == nil || *response.Confidence < 0 || *response.Confidence > 1 {
+		return errors.New("confidence AI wajib berada dalam rentang 0 sampai 1")
+	}
+	if response.ModelVersion == nil || *response.ModelVersion == "" {
+		return errors.New("model_version AI wajib diisi")
 	}
 
 	level := int16(0)
@@ -92,17 +117,16 @@ func normalizeAIResponse(response *domain.ValidasiAIResponse) error {
 		}
 	}
 
-	photoLayak := response.PhotoStatus != nil && *response.PhotoStatus == "layak_dinilai"
+	photoLayak := *response.PhotoStatus == "layak_dinilai"
+	if !photoLayak && *response.PhotoStatus != "tidak_layak" {
+		return errors.New("photo_status AI tidak didukung")
+	}
 	if photoLayak && level == 0 {
 		return errors.New("AI menyatakan foto layak tetapi tidak memberikan lighting_class")
 	}
 	if photoLayak && response.AIStatus != "selesai" {
 		return errors.New("status AI tidak konsisten untuk foto layak")
 	}
-	if !photoLayak && response.PhotoStatus != nil && *response.PhotoStatus != "tidak_layak" && *response.PhotoStatus != "perlu_tinjauan" {
-		return errors.New("photo_status AI tidak dikenal")
-	}
-
 	result := "tidak_valid"
 	var levelPtr *int16
 	if photoLayak {
@@ -136,9 +160,6 @@ func (u *ValidasiAIUsecase) RetryValidasi(ctx context.Context, idLaporan string,
 		return errors.New("retry hanya diizinkan untuk laporan berstatus gagal_validasi")
 	}
 	if err := u.ProsesValidasiAI(ctx, idLaporan, laporanRepo); err != nil {
-		if statusErr := u.repo.TandaiGagal(ctx, idLaporan, err.Error()); statusErr != nil {
-			return errors.Join(err, statusErr)
-		}
 		return err
 	}
 	return nil

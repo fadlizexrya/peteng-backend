@@ -336,21 +336,40 @@ func (r *ValidasiAIRepository) GetTerbaru(
 ) (*domain.ValidasiAI, error) {
 	var hasil domain.ValidasiAI
 	var objekJSON []byte
+	var analisis domain.RiwayatHasilAI
+	var requestID, aiStatus, modelVersion *string
 
 	err := r.db.QueryRow(ctx, `
 		SELECT
-			id_validasi,
-			id_laporan,
-			hasil_validasi,
-			tingkat_kegelapan_ai,
-			cnn_confidence,
-			objek_terdeteksi,
-			catatan,
-			model_version,
-			tanggal_validasi
-		FROM validasi_ai
-		WHERE id_laporan = $1
-		ORDER BY tanggal_validasi DESC
+			v.id_validasi,
+			v.id_laporan,
+			v.hasil_validasi,
+			v.tingkat_kegelapan_ai,
+			v.cnn_confidence,
+			v.objek_terdeteksi,
+			v.catatan,
+			v.model_version,
+			v.tanggal_validasi,
+			a.request_id,
+			a.ai_status,
+			a.photo_status,
+			a.lighting_class,
+			a.confidence,
+			a.model_version,
+			a.pesan,
+			a.response_json,
+			a.tanggal_proses
+		FROM validasi_ai v
+		LEFT JOIN LATERAL (
+			SELECT request_id, ai_status, photo_status, lighting_class, confidence,
+			       model_version, pesan, response_json, tanggal_proses
+			FROM riwayat_hasil_ai
+			WHERE id_laporan = v.id_laporan
+			ORDER BY tanggal_proses DESC
+			LIMIT 1
+		) a ON TRUE
+		WHERE v.id_laporan = $1
+		ORDER BY v.tanggal_validasi DESC
 		LIMIT 1
 	`, idLaporan).Scan(
 		&hasil.IDValidasi,
@@ -362,6 +381,15 @@ func (r *ValidasiAIRepository) GetTerbaru(
 		&hasil.Catatan,
 		&hasil.ModelVersion,
 		&hasil.TanggalValidasi,
+		&requestID,
+		&aiStatus,
+		&analisis.PhotoStatus,
+		&analisis.LightingClass,
+		&analisis.Confidence,
+		&modelVersion,
+		&analisis.Pesan,
+		&analisis.ResponseJSON,
+		&analisis.TanggalProses,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -371,5 +399,13 @@ func (r *ValidasiAIRepository) GetTerbaru(
 	}
 
 	hasil.ObjekTerdeteksi = json.RawMessage(objekJSON)
+	if requestID != nil && aiStatus != nil {
+		analisis.RequestID = *requestID
+		analisis.AIStatus = *aiStatus
+		if modelVersion != nil {
+			analisis.ModelVersion = modelVersion
+		}
+		hasil.AnalisisAI = &analisis
+	}
 	return &hasil, nil
 }

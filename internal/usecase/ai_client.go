@@ -52,6 +52,7 @@ func (c *HTTPAIServiceClient) ValidasiFoto(
 	}
 
 	const maxAttempts = 3
+	requestID := fmt.Sprintf("ai-%d", time.Now().UnixNano())
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		var body bytes.Buffer
@@ -86,7 +87,7 @@ func (c *HTTPAIServiceClient) ValidasiFoto(
 			return nil, err
 		}
 		httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-		httpReq.Header.Set("X-Request-ID", fmt.Sprintf("ai-%d", time.Now().UnixNano()))
+		httpReq.Header.Set("X-Request-ID", requestID)
 		if c.serviceToken != "" {
 			httpReq.Header.Set("Authorization", "Bearer "+c.serviceToken)
 		}

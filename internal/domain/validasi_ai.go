@@ -6,15 +6,28 @@ import (
 )
 
 type ValidasiAI struct {
-	IDValidasi         string    `json:"id_validasi"`
-	IDLaporan          string    `json:"id_laporan"`
-	HasilValidasi      string    `json:"hasil_validasi"`
-	TingkatKegelapanAI *int16    `json:"tingkat_kegelapan_ai"`
-	CNNConfidence      *float64  `json:"cnn_confidence"`
-	ObjekTerdeteksi    any       `json:"objek_terdeteksi"`
-	Catatan            *string   `json:"catatan"`
-	ModelVersion       *string   `json:"model_version"`
-	TanggalValidasi    time.Time `json:"tanggal_validasi"`
+	IDValidasi         string          `json:"id_validasi"`
+	IDLaporan          string          `json:"id_laporan"`
+	HasilValidasi      string          `json:"hasil_validasi"`
+	TingkatKegelapanAI *int16          `json:"tingkat_kegelapan_ai"`
+	CNNConfidence      *float64        `json:"cnn_confidence"`
+	ObjekTerdeteksi    any             `json:"objek_terdeteksi"`
+	Catatan            *string         `json:"catatan"`
+	ModelVersion       *string         `json:"model_version"`
+	TanggalValidasi    time.Time       `json:"tanggal_validasi"`
+	AnalisisAI         *RiwayatHasilAI `json:"analisis_ai,omitempty"`
+}
+
+type RiwayatHasilAI struct {
+	RequestID     string          `json:"request_id"`
+	AIStatus      string          `json:"ai_status"`
+	PhotoStatus   *string         `json:"photo_status"`
+	LightingClass *string         `json:"lighting_class"`
+	Confidence    *float64        `json:"confidence"`
+	ModelVersion  *string         `json:"model_version"`
+	Pesan         *string         `json:"pesan"`
+	ResponseJSON  json.RawMessage `json:"response_json,omitempty"`
+	TanggalProses time.Time       `json:"tanggal_proses"`
 }
 
 // Request untuk simulasi hasil validasi.
