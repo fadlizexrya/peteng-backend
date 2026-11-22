@@ -3,18 +3,19 @@ package domain
 import "time"
 
 type Laporan struct {
-	IDLaporan        string    `json:"id_laporan"`
-	IDWarga          int       `json:"id_warga"`
-	Foto             string    `json:"foto"`
-	Latitude         float64   `json:"latitude"`
-	Longitude        float64   `json:"longitude"`
-	KeteranganLokasi string    `json:"keterangan_lokasi"`
-	Kategori         string    `json:"kategori"`
-	TingkatKegelapan int16     `json:"tingkat_kegelapan"`
-	Deskripsi        string    `json:"deskripsi"`
-	Status           string    `json:"status"`
-	TanggalLaporan   time.Time `json:"tanggal_laporan"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	IDLaporan        string      `json:"id_laporan"`
+	IDWarga          int         `json:"id_warga"`
+	Foto             string      `json:"foto"`
+	Latitude         float64     `json:"latitude"`
+	Longitude        float64     `json:"longitude"`
+	KeteranganLokasi string      `json:"keterangan_lokasi"`
+	Kategori         string      `json:"kategori"`
+	TingkatKegelapan int16       `json:"tingkat_kegelapan"`
+	Deskripsi        string      `json:"deskripsi"`
+	Status           string      `json:"status"`
+	TanggalLaporan   time.Time   `json:"tanggal_laporan"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+	HasilValidasiAI  *ValidasiAI `json:"hasil_validasi_ai,omitempty"`
 }
 
 type LaporanReq struct {
@@ -28,8 +29,9 @@ type LaporanReq struct {
 }
 
 type LaporanDetail struct {
-	Laporan Laporan          `json:"laporan"`
-	Progres []ProgresLaporan `json:"progres"`
+	Laporan       Laporan          `json:"laporan"`
+	HasilValidasi *ValidasiAI      `json:"hasil_validasi_ai,omitempty"`
+	Progres       []ProgresLaporan `json:"progres"`
 }
 
 type UpdateStatusLaporanReq struct {

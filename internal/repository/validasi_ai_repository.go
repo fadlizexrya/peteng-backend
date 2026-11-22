@@ -42,9 +42,9 @@ func (r *ValidasiAIRepository) MulaiValidasi(
 		return err
 	}
 
-	if status != "diajukan" {
+	if status != "diajukan" && status != "gagal_validasi" {
 		return fmt.Errorf(
-			"laporan harus berstatus diajukan, status sekarang: %s",
+			"laporan harus berstatus diajukan atau gagal_validasi, status sekarang: %s",
 			status,
 		)
 	}
@@ -74,6 +74,42 @@ func (r *ValidasiAIRepository) MulaiValidasi(
 		return err
 	}
 
+	return tx.Commit(ctx)
+}
+
+// StatusLaporan mengembalikan status terkini untuk memvalidasi permintaan retry.
+func (r *ValidasiAIRepository) StatusLaporan(ctx context.Context, idLaporan string) (string, error) {
+	var status string
+	err := r.db.QueryRow(ctx, `SELECT status FROM laporan WHERE id_laporan = $1`, idLaporan).Scan(&status)
+	return status, err
+}
+
+// TandaiGagal menyimpan kondisi gagal yang bisa ditampilkan dan dicoba ulang.
+func (r *ValidasiAIRepository) TandaiGagal(ctx context.Context, idLaporan, alasan string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE laporan
+		SET status = 'gagal_validasi', updated_at = NOW()
+		WHERE id_laporan = $1 AND status IN ('diajukan', 'diproses_ai', 'gagal_validasi')
+	`, idLaporan)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO progres_laporan (id_laporan, judul, deskripsi)
+		VALUES ($1, 'Validasi AI gagal', $2)
+	`, idLaporan, alasan)
+	if err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -183,6 +219,14 @@ func (r *ValidasiAIRepository) SimpanHasilAI(
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT status FROM laporan WHERE id_laporan = $1 FOR UPDATE`, idLaporan).Scan(&status); err != nil {
+		return err
+	}
+	if status != "diproses_ai" {
+		return fmt.Errorf("laporan harus berstatus diproses_ai, status sekarang: %s", status)
+	}
 
 	if hasil == nil {
 		return errors.New("hasil validasi AI kosong")

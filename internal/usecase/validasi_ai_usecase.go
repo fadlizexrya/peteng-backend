@@ -32,12 +32,18 @@ func (u *ValidasiAIUsecase) ProsesValidasiAI(
 	if u.aiClient == nil {
 		return errors.New("ai client tidak terkonfigurasi")
 	}
+	if u.repo == nil {
+		return errors.New("repository validasi AI tidak terkonfigurasi")
+	}
 
 	if laporanRepo == nil {
 		return errors.New("repository laporan tidak terkonfigurasi")
 	}
 	laporan, err := laporanRepo.GetByID(ctx, idLaporan)
 	if err != nil {
+		return err
+	}
+	if err := u.repo.MulaiValidasi(ctx, idLaporan); err != nil {
 		return err
 	}
 	imageBytes, contentType, err := DecodeStoredPhoto(laporan.Foto)
@@ -115,6 +121,29 @@ func normalizeAIResponse(response *domain.ValidasiAIResponse) error {
 	return nil
 }
 
+func (u *ValidasiAIUsecase) RetryValidasi(ctx context.Context, idLaporan string, laporanRepo *repository.LaporanRepository) error {
+	if idLaporan == "" {
+		return errors.New("id laporan wajib diisi")
+	}
+	if u.repo == nil || u.aiClient == nil {
+		return errors.New("layanan validasi AI tidak terkonfigurasi")
+	}
+	status, err := u.repo.StatusLaporan(ctx, idLaporan)
+	if err != nil {
+		return err
+	}
+	if status != "gagal_validasi" {
+		return errors.New("retry hanya diizinkan untuk laporan berstatus gagal_validasi")
+	}
+	if err := u.ProsesValidasiAI(ctx, idLaporan, laporanRepo); err != nil {
+		if statusErr := u.repo.TandaiGagal(ctx, idLaporan, err.Error()); statusErr != nil {
+			return errors.Join(err, statusErr)
+		}
+		return err
+	}
+	return nil
+}
+
 func (u *ValidasiAIUsecase) MulaiValidasi(
 	ctx context.Context,
 	idLaporan string,
@@ -158,6 +187,10 @@ func (u *ValidasiAIUsecase) SimpanHasilMock(
 	}
 
 	return u.repo.SimpanHasilMock(ctx, idLaporan, req)
+}
+
+func (u *ValidasiAIUsecase) TandaiGagal(ctx context.Context, idLaporan, alasan string) error {
+	return u.repo.TandaiGagal(ctx, idLaporan, alasan)
 }
 
 func (u *ValidasiAIUsecase) GetTerbaru(

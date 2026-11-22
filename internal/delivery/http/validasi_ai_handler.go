@@ -47,6 +47,24 @@ func (h *ValidasiAIHandler) Mulai(w http.ResponseWriter, r *http.Request) {
 	writeJSONSuccess(w, http.StatusOK, "Laporan masuk proses validasi AI")
 }
 
+// POST /api/dinas/laporan/{id_laporan}/validasi-ai/retry
+func (h *ValidasiAIHandler) Retry(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id_laporan")
+	if err := h.usecase.RetryValidasi(r.Context(), id, h.laporanRepo); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeJSONError(w, http.StatusNotFound, "Laporan tidak ditemukan")
+			return
+		}
+		if err.Error() == "retry hanya diizinkan untuk laporan berstatus gagal_validasi" {
+			writeJSONError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "Retry validasi AI gagal")
+		return
+	}
+	writeJSONSuccess(w, http.StatusOK, "Validasi AI berhasil dicoba ulang")
+}
+
 // POST /api/dinas/laporan/{id_laporan}/validasi-ai/mock
 func (h *ValidasiAIHandler) SimpanHasilMock(
 	w http.ResponseWriter,

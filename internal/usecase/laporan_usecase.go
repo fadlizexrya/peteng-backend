@@ -3,6 +3,8 @@ package usecase
 import (
 	"context"
 	"errors"
+	"log"
+	"time"
 
 	"peteng-backend/internal/domain"
 	"peteng-backend/internal/repository"
@@ -11,18 +13,26 @@ import (
 )
 
 type LaporanUsecase struct {
-	laporanRepo *repository.LaporanRepository
-	progresRepo *repository.ProgresLaporanRepository
+	laporanRepo  *repository.LaporanRepository
+	progresRepo  *repository.ProgresLaporanRepository
+	validasiRepo *repository.ValidasiAIRepository
+	validasiAI   *ValidasiAIUsecase
 }
 
 func NewLaporanUsecase(
 	laporanRepo *repository.LaporanRepository,
 	progresRepo *repository.ProgresLaporanRepository,
+	validasiAI ...*ValidasiAIUsecase,
 ) *LaporanUsecase {
-	return &LaporanUsecase{
+	u := &LaporanUsecase{
 		laporanRepo: laporanRepo,
 		progresRepo: progresRepo,
 	}
+	if len(validasiAI) > 0 {
+		u.validasiAI = validasiAI[0]
+		u.validasiRepo = validasiAI[0].repo
+	}
+	return u
 }
 
 func (u *LaporanUsecase) BuatLaporan(
@@ -77,6 +87,21 @@ func (u *LaporanUsecase) BuatLaporan(
 		return nil, err
 	}
 
+	if u.validasiAI != nil {
+		// Process after returning the successful report response. If AI is
+		// unavailable, keep the report and expose a retryable failed status.
+		go func(id string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			if err := u.validasiAI.ProsesValidasiAI(ctx, id, u.laporanRepo); err != nil {
+				log.Printf("validasi AI laporan %s gagal: %v", id, err)
+				if statusErr := u.validasiAI.TandaiGagal(ctx, id, err.Error()); statusErr != nil {
+					log.Printf("gagal menandai validasi AI laporan %s: %v", id, statusErr)
+				}
+			}
+		}(laporan.IDLaporan)
+	}
+
 	return laporan, nil
 }
 
@@ -84,7 +109,28 @@ func (u *LaporanUsecase) DaftarLaporanWarga(
 	ctx context.Context,
 	idWarga int,
 ) ([]domain.Laporan, error) {
-	return u.laporanRepo.GetByWargaID(ctx, idWarga)
+	laporans, err := u.laporanRepo.GetByWargaID(ctx, idWarga)
+	if err != nil {
+		return nil, err
+	}
+	if err := u.attachAIResults(ctx, laporans); err != nil {
+		return nil, err
+	}
+	return laporans, nil
+}
+
+func (u *LaporanUsecase) attachAIResults(ctx context.Context, laporans []domain.Laporan) error {
+	if u.validasiRepo == nil {
+		return nil
+	}
+	for i := range laporans {
+		hasil, err := u.validasiRepo.GetTerbaru(ctx, laporans[i].IDLaporan)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		laporans[i].HasilValidasiAI = hasil
+	}
+	return nil
 }
 
 func (u *LaporanUsecase) DetailLaporanWarga(
@@ -112,16 +158,35 @@ func (u *LaporanUsecase) DetailLaporanWarga(
 		return nil, err
 	}
 
-	return &domain.LaporanDetail{
-		Laporan: *laporan,
-		Progres: progres,
-	}, nil
+	if u.validasiRepo != nil {
+		hasil, err := u.validasiRepo.GetTerbaru(ctx, laporan.IDLaporan)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		laporan.HasilValidasiAI = hasil
+	}
+	detail := &domain.LaporanDetail{
+		Laporan:       *laporan,
+		HasilValidasi: laporan.HasilValidasiAI,
+		Progres:       progres,
+	}
+	return detail, nil
 }
 
 func (u *LaporanUsecase) DaftarSemuaLaporan(
 	ctx context.Context,
 ) ([]domain.Laporan, error) {
-	return u.laporanRepo.GetAll(ctx)
+	laporans, err := u.laporanRepo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if u.validasiRepo == nil {
+		return laporans, nil
+	}
+	if err := u.attachAIResults(ctx, laporans); err != nil {
+		return nil, err
+	}
+	return laporans, nil
 }
 
 func (u *LaporanUsecase) UpdateStatusLaporanDishub(

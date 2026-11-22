@@ -81,8 +81,8 @@ func (r *LaporanRepository) CreateWithProgress(
 		ctx,
 		queryProgres,
 		laporan.IDLaporan,
-		"Laporan berhasil dibuat",
-		"Laporan warga berhasil diterima dan menunggu proses validasi AI.",
+		"Validasi AI menunggu",
+		"Laporan tersimpan dan akan divalidasi otomatis oleh AI.",
 	)
 	if err != nil {
 		return err

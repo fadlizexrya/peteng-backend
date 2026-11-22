@@ -48,6 +48,11 @@ func main() {
 		wargaUsecase,
 	)
 
+	// SETUP VALIDASI AI
+	validasiAIRepo := repository.NewValidasiAIRepository(db)
+	aiClient := usecase.NewHTTPAIServiceClient(os.Getenv("AI_SERVICE_URL"))
+	validasiAIUsecase := usecase.NewValidasiAIUsecase(validasiAIRepo, aiClient)
+
 	// SETUP LAPORAN
 	laporanRepo := repository.NewLaporanRepository(db)
 	progresRepo := repository.NewProgresLaporanRepository(db)
@@ -55,6 +60,7 @@ func main() {
 	laporanUsecase := usecase.NewLaporanUsecase(
 		laporanRepo,
 		progresRepo,
+		validasiAIUsecase,
 	)
 	laporanHandler := deliveryHttp.NewLaporanHandler(
 		laporanUsecase,
@@ -84,15 +90,7 @@ func main() {
 		lokasiUsecase,
 	)
 
-	// SETUP VALIDASI AI
-	validasiAIRepo := repository.NewValidasiAIRepository(db)
-	aiClient := usecase.NewHTTPAIServiceClient(
-		os.Getenv("AI_SERVICE_URL"),
-	)
-	validasiAIUsecase := usecase.NewValidasiAIUsecase(
-		validasiAIRepo,
-		aiClient,
-	)
+	// SETUP HANDLER VALIDASI AI
 	validasiAIHandler := deliveryHttp.NewValidasiAIHandler(
 		validasiAIUsecase,
 		laporanRepo,
@@ -279,6 +277,11 @@ func main() {
 		r.Post(
 			"/laporan/{id_laporan}/validasi-ai/proses",
 			validasiAIHandler.Proses,
+		)
+
+		r.Post(
+			"/laporan/{id_laporan}/validasi-ai/retry",
+			validasiAIHandler.Retry,
 		)
 
 		r.Post(

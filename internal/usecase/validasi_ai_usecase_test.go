@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"testing"
 
 	"peteng-backend/internal/domain"
@@ -36,6 +37,24 @@ func TestNormalizeAIResponseMapsUnusablePhotoToNilLevel(t *testing.T) {
 	}
 	if response.Data.HasilValidasi != "tidak_valid" || response.Data.TingkatKegelapanAI != nil {
 		t.Fatalf("expected tidak_valid with nil level, got %+v", response.Data)
+	}
+}
+
+func TestRetryValidasiRequiresConfiguredDependencies(t *testing.T) {
+	usecase := &ValidasiAIUsecase{}
+	err := usecase.RetryValidasi(context.Background(), "report-1", nil)
+	if err == nil || err.Error() != "layanan validasi AI tidak terkonfigurasi" {
+		t.Fatalf("expected configuration error, got %v", err)
+	}
+}
+
+func TestDecodeStoredPhotoDataURI(t *testing.T) {
+	got, contentType, err := DecodeStoredPhoto("data:image/png;base64,aGVsbG8=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "hello" || contentType != "image/png" {
+		t.Fatalf("unexpected decoded photo: bytes=%q contentType=%q", got, contentType)
 	}
 }
 
