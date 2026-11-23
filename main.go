@@ -138,6 +138,8 @@ func main() {
 			"http://localhost:3000",
 			"http://localhost:62168",
 			"http://127.0.0.1:62168",
+			"http://localhost:26270",
+			"http://127.0.0.1:26270",
 		},
 
 		AllowedMethods: []string{
